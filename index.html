@@ -114,14 +114,12 @@ select option{background:#fff;color:#111827;}
 .empty{text-align:center;padding:32px 20px;color:var(--text3);}
 .empty-icon{font-size:36px;margin-bottom:8px;}
 .empty-text{font-size:13px;}
-#install-banner{background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--rsm);padding:12px 14px;margin:16px 16px 0;display:none;align-items:center;gap:10px;}
-#install-banner.show{display:flex;}
-#ios-banner{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--rsm);padding:12px 14px;margin:16px 16px 0;display:none;font-size:12px;color:var(--text2);line-height:1.6;}
-#ios-banner.show{display:block;}
-#ios-banner strong{color:var(--text);display:block;font-size:13px;margin-bottom:4px;}
-.ib-text{flex:1;font-size:12px;color:var(--text2);line-height:1.4;}
-.ib-text strong{color:var(--text);display:block;font-size:13px;margin-bottom:2px;}
-.btn-install{padding:8px 14px;font-size:12px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;}
+#install-banner{display:none;}
+.btn-install{width:100%;padding:14px;font-size:15px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:var(--rsm);cursor:pointer;}
+.btn-install:active{opacity:.85;}
+.install-card{background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.install-steps{font-size:13px;color:var(--text2);line-height:2;margin:10px 0 14px;}
+.install-steps b{color:var(--text);}
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1f2937;border:1px solid #374151;border-radius:20px;padding:10px 18px;font-size:13px;color:#f9fafb;opacity:0;transition:all .3s;pointer-events:none;z-index:300;white-space:nowrap;max-width:90vw;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 ::-webkit-scrollbar{width:0;}
@@ -137,12 +135,7 @@ select option{background:#fff;color:#111827;}
     </div>
   </div>
   <div id="install-banner">
-    <div class="ib-text"><strong>Install App</strong>Add to home screen for offline use</div>
-    <button class="btn-install" id="install-btn">Install</button>
-  </div>
-  <div id="ios-banner">
-    <strong>📲 Install this App on iPhone</strong>
-    Tap the <strong>Share button</strong> (□↑) at the bottom of Safari, then tap <strong>"Add to Home Screen"</strong>
+    <button class="btn-install" id="install-btn" style="display:none">Install</button>
   </div>
   <div id="content">
 
@@ -218,6 +211,32 @@ select option{background:#fff;color:#111827;}
 
     <!-- MANAGE -->
     <div class="view" id="view-manage">
+
+      <!-- INSTALL CARD - always visible until installed -->
+      <div class="install-card" id="install-card">
+        <div class="card-title" style="margin-bottom:8px">📲 Install App on Your Phone</div>
+        <div id="android-install" style="display:none">
+          <div class="install-steps">
+            <b>Tap the button below to install:</b>
+          </div>
+          <button class="btn-install" id="install-btn2">⬇ Install App on This Device</button>
+        </div>
+        <div id="ios-install" style="display:none">
+          <div class="install-steps">
+            <b>iPhone / iPad steps:</b><br>
+            1️⃣ Tap the <b>Share button</b> (□↑) at bottom of Safari<br>
+            2️⃣ Scroll down and tap <b>"Add to Home Screen"</b><br>
+            3️⃣ Tap <b>Add</b> — done!
+          </div>
+        </div>
+        <div id="other-install">
+          <div class="install-steps">
+            <b>Android Chrome:</b> Tap ⋮ menu → <b>"Add to Home Screen"</b><br>
+            <b>iPhone Safari:</b> Tap □↑ → <b>"Add to Home Screen"</b>
+          </div>
+        </div>
+      </div>
+
       <div class="manage-tabs">
         <div class="mtab active" id="mt-customers" onclick="switchMTab('customers')">Customers</div>
         <div class="mtab" id="mt-parts" onclick="switchMTab('parts')">Parts</div>
@@ -812,38 +831,56 @@ function registerSW(){
 function setupInstall(){
   const ua = navigator.userAgent.toLowerCase();
   const isIOS = /iphone|ipad|ipod/.test(ua);
-  const isAndroid = /android/.test(ua);
-  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
-  // Already installed — don't show anything
-  if(isInStandaloneMode) return;
-
-  // iOS: show manual instructions (no programmatic install on iOS)
-  if(isIOS){
-    document.getElementById('ios-banner').classList.add('show');
+  // Hide install card if already installed
+  if(isStandalone){
+    const card = document.getElementById('install-card');
+    if(card) card.style.display='none';
     return;
   }
 
-  // Android Chrome: wait for beforeinstallprompt
+  // iOS Safari — show manual steps
+  if(isIOS){
+    document.getElementById('ios-install').style.display='block';
+    document.getElementById('other-install').style.display='none';
+    return;
+  }
+
+  // Android / Chrome — try beforeinstallprompt
+  document.getElementById('other-install').style.display='block';
+
   window.addEventListener('beforeinstallprompt', e => {
     e.preventDefault();
     deferredInstall = e;
-    document.getElementById('install-banner').classList.add('show');
+    // Show the big install button
+    document.getElementById('android-install').style.display='block';
+    document.getElementById('other-install').style.display='none';
   });
 
-  document.getElementById('install-btn').addEventListener('click', async () => {
-    if(!deferredInstall) return;
-    deferredInstall.prompt();
-    const {outcome} = await deferredInstall.userChoice;
-    if(outcome === 'accepted'){
-      document.getElementById('install-banner').classList.remove('show');
-      showToast('✓ App installed!');
-    }
-    deferredInstall = null;
+  // Wire up both install buttons
+  ['install-btn','install-btn2'].forEach(id => {
+    const btn = document.getElementById(id);
+    if(!btn) return;
+    btn.addEventListener('click', async () => {
+      if(!deferredInstall){
+        showToast('Tap ⋮ menu → Add to Home Screen');
+        return;
+      }
+      deferredInstall.prompt();
+      const {outcome} = await deferredInstall.userChoice;
+      if(outcome === 'accepted'){
+        showToast('✓ App installed!');
+        const card = document.getElementById('install-card');
+        if(card) card.style.display='none';
+      }
+      deferredInstall = null;
+    });
   });
 
   window.addEventListener('appinstalled', () => {
-    document.getElementById('install-banner').classList.remove('show');
+    const card = document.getElementById('install-card');
+    if(card) card.style.display='none';
     showToast('✓ App installed!');
   });
 }
