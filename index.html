@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fettling">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Fettling Consumables</title>
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --bg2: #ffffff;
+    --bg3: #f8f9fb;
+    --bg4: #eef0f4;
+    --accent: #2563eb;
+    --accent2: #4f46e5;
+    --green: #16a34a;
+    --amber: #d97706;
+    --red: #dc2626;
+    --purple: #7c3aed;
+    --text: #111827;
+    --text2: #4b5563;
+    --text3: #9ca3af;
+    --border: rgba(0,0,0,0.07);
+    --border2: rgba(0,0,0,0.12);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif; color: var(--text); }
+
+  /* App shell */
+  #app { display: flex; flex-direction: column; height: 100%; max-width: 480px; margin: 0 auto; position: relative; }
+  #topbar { padding: env(safe-area-inset-top, 12px) 16px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  #topbar-inner { display: flex; align-items: center; justify-content: space-between; }
+  .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar-sub { font-size: 12px; color: var(--text2); margin-top: 1px; }
+  .date-pill { font-size: 11px; background: var(--bg4); color: var(--text2); padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border2); }
+  #content { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 80px; }
+  #navbar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--bg2); border-top: 1px solid var(--border); display: flex; padding-bottom: env(safe-area-inset-bottom, 0); z-index: 100; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 0 8px; cursor: pointer; color: var(--text3); transition: color 0.2s; gap: 3px; }
+  .nav-item.active { color: var(--accent); }
+  .nav-icon { font-size: 22px; line-height: 1; }
+  .nav-label { font-size: 10px; font-weight: 500; letter-spacing: 0.3px; }
+
+  /* Views */
+  .view { display: none; padding: 16px; }
+  .view.active { display: block; }
+
+  /* Cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .card-title { font-size: 11px; font-weight: 600; color: var(--text3); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 12px; }
+
+  /* Form fields */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .label { font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+  select, input[type=text], input[type=number], input[type=date] {
+    width: 100%; padding: 11px 14px; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: var(--radius-sm); color: var(--text); font-size: 14px; font-family: inherit;
+    appearance: none; -webkit-appearance: none; outline: none; transition: border-color 0.2s;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+  select option { background: #ffffff; color: #111827; }
+
+  /* Category buttons */
+  .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .cat-btn { padding: 12px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: var(--bg3); color: var(--text2); cursor: pointer; text-align: center; font-size: 12px; font-weight: 500; line-height: 1.4; transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .cat-btn .ci { font-size: 20px; }
+  .cat-btn.active-rc { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+  .cat-btn.active-el { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+  .cat-btn.active-wh { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+  .cat-btn.active-mp { background: #f5f3ff; border-color: #c4b5fd; color: #6d28d9; }
+
+  /* Rate badge */
+  .rate-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #15803d; background: #f0fdf4; border: 1px solid #86efac; border-radius: 20px; padding: 4px 10px; margin-top: 6px; }
+
+  /* Qty row */
+  .qty-row { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+
+  /* Cost preview */
+  .cost-preview { background: #f0fdf4; border: 1px solid #86efac; border-radius: var(--radius-sm); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; margin: 14px 0; }
+  .cost-preview-label { font-size: 12px; color: var(--text2); }
+  .cost-preview-val { font-size: 22px; font-weight: 700; color: var(--green); letter-spacing: -0.5px; }
+
+  /* Primary button */
+  .btn-primary { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: -0.2px; transition: opacity 0.15s, transform 0.1s; }
+  .btn-primary:active { opacity: 0.85; transform: scale(0.98); }
+  .btn-sm { padding: 7px 14px; font-size: 12px; font-weight: 600; border: none; border-radius: 6px; cursor: pointer; transition: opacity 0.15s; }
+  .btn-green { background: rgba(34,197,94,0.2); color: var(--green); }
+  .btn-red { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  /* Entry items */
+  .entry-list { display: flex; flex-direction: column; gap: 8px; }
+  .entry-item { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .entry-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .entry-item-name { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.35; flex: 1; }
+  .entry-item-cost { font-size: 14px; font-weight: 700; color: var(--green); white-space: nowrap; }
+  .entry-item-meta { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+  .tag-rc { background: #eff6ff; color: #1d4ed8; }
+  .tag-el { background: #fffbeb; color: #b45309; }
+  .tag-wh { background: #f0fdf4; color: #15803d; }
+  .tag-mp { background: #f5f3ff; color: #6d28d9; }
+  .entry-sub { font-size: 11px; color: var(--text3); }
+
+  /* Total bar */
+  .total-bar { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; margin-bottom: 12px; }
+  .total-bar-label { font-size: 12px; color: var(--text2); }
+  .total-bar-val { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+
+  /* Stat cards */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+  .stat-label { font-size: 11px; color: var(--text3); margin-bottom: 6px; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  .stat-val.green { color: var(--green); }
+  .stat-val.amber { color: var(--amber); }
+
+  /* Date history */
+  .date-entry { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 8px; transition: border-color 0.15s; }
+  .date-entry:active { border-color: var(--accent); }
+  .date-label { font-size: 14px; font-weight: 500; }
+  .date-count { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .date-total { font-size: 15px; font-weight: 700; color: var(--green); }
+
+  /* Rates */
+  .rate-section-header { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text3); padding: 10px 0 6px; margin-top: 6px; border-top: 1px solid var(--border); }
+  .rate-section-header:first-child { border-top: none; margin-top: 0; }
+  .rate-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .rate-row:last-child { border-bottom: none; }
+  .rate-name { flex: 1; font-size: 12px; color: var(--text2); line-height: 1.35; }
+  .rate-input-wrap { display: flex; align-items: center; gap: 4px; }
+  .rate-input-wrap input { width: 80px; text-align: right; padding: 7px 8px; font-size: 13px; }
+  .save-btn { padding: 7px 10px; font-size: 11px; font-weight: 600; background: rgba(79,142,247,0.15); color: var(--accent); border: 1px solid rgba(79,142,247,0.3); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .saved-ok { font-size: 11px; color: var(--green); opacity: 0; transition: opacity 0.3s; }
+  .saved-ok.show { opacity: 1; }
+
+  /* History detail modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--bg2); border-radius: var(--radius) var(--radius) 0 0; border: 1px solid var(--border2); padding: 20px 16px; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); width: 100%; max-height: 75vh; overflow-y: auto; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--border2); border-radius: 2px; margin: 0 auto 16px; }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 14px; }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 40px 20px; color: var(--text3); }
+  .empty-icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-text { font-size: 14px; }
+
+  /* Install banner */
+  #install-banner { background: #eff6ff; border: 1px solid #93c5fd; border-radius: var(--radius-sm); padding: 12px 14px; margin: 16px 16px 0; display: none; align-items: center; gap: 10px; }
+  #install-banner.show { display: flex; }
+  .install-text { flex: 1; font-size: 12px; color: var(--text2); line-height: 1.4; }
+  .install-text strong { color: var(--text); display: block; font-size: 13px; margin-bottom: 2px; }
+  .btn-install { padding: 8px 14px; font-size: 12px; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1f2937; border: 1px solid #374151; border-radius: 20px; padding: 10px 18px; font-size: 13px; color: #f9fafb; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 300; white-space: nowrap; max-width: 90vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="topbar">
+    <div id="topbar-inner">
+      <div>
+        <div class="topbar-title">⚙ Fettling</div>
+        <div class="topbar-sub">Stage 7 · Consumables</div>
+      </div>
+      <div class="date-pill" id="today-pill"></div>
+    </div>
+  </div>
+
+  <div id="install-banner">
+    <div class="install-text">
+      <strong>Install App</strong>
+      Add to home screen for offline access
+    </div>
+    <button class="btn-install" id="install-btn">Install</button>
+  </div>
+
+  <div id="content">
+    <!-- ENTRY VIEW -->
+    <div class="view active" id="view-entry">
+      <div class="card">
+        <div class="card-title">Job Details</div>
+        <div class="field">
+          <div class="label">Customer</div>
+          <select id="sel-customer" onchange="filterParts()">
+            <option value="">— Select customer —</option>
+          </select>
+        </div>
+        <div class="field">
+          <div class="label">Part No.</div>
+          <select id="sel-part">
+            <option value="">— Select part —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Category</div>
+        <div class="cat-grid">
+          <div class="cat-btn active-rc" id="cat-rc" onclick="selectCat('rc')">
+            <span class="ci">✂</span>Rotary Cutter
+          </div>
+          <div class="cat-btn" id="cat-el" onclick="selectCat('el')">
+            <span class="ci">⚡</span>Electrode
+          </div>
+          <div class="cat-btn" id="cat-wh" onclick="selectCat('wh')">
+            <span class="ci">⭕</span>Wheel
+          </div>
+          <div class="cat-btn" id="cat-mp" onclick="selectCat('mp')">
+            <span class="ci">💎</span>Mounted Point
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Consumable Item</div>
+          <select id="sel-item" onchange="onItemChange()">
+            <option value="">— Select item —</option>
+          </select>
+          <div class="rate-tag" id="rate-tag" style="display:none">
+            ₹<span id="rate-val">0</span> / <span id="rate-unit">Nos</span>
+          </div>
+        </div>
+
+        <div class="qty-row">
+          <div class="field">
+            <div class="label">Quantity Used</div>
+            <input type="number" id="inp-qty" placeholder="0" min="0" step="0.01" oninput="calcCost()">
+          </div>
+          <div class="field">
+            <div class="label">Unit</div>
+            <select id="inp-unit" onchange="calcCost()">
+              <option value="Nos">Nos</option>
+              <option value="Kg">Kg</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="cost-preview">
+          <div>
+            <div class="cost-preview-label">Estimated Cost</div>
+          </div>
+          <div class="cost-preview-val" id="cost-val">₹ 0</div>
+        </div>
+
+        <button class="btn-primary" onclick="addEntry()">+ Add to Today's Log</button>
+      </div>
+    </div>
+
+    <!-- LOG VIEW -->
+    <div class="view" id="view-log">
+      <div class="total-bar">
+        <div>
+          <div class="total-bar-label">Today's Total</div>
+        </div>
+        <div class="total-bar-val" id="log-total">₹ 0</div>
+      </div>
+      <div id="log-list"></div>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div class="view" id="view-history">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Days Recorded</div>
+          <div class="stat-val" id="stat-days">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Entries</div>
+          <div class="stat-val amber" id="stat-entries">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">This Week</div>
+          <div class="stat-val green" id="stat-week">₹ 0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">This Month</div>
+          <div class="stat-val green" id="stat-month">₹ 0</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Daily Records</div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+
+    <!-- RATES VIEW -->
+    <div class="view" id="view-rates">
+      <div class="card">
+        <div class="card-title">Edit Rates (₹ per unit)</div>
+        <div id="rates-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="navbar">
+    <div class="nav-item active" id="nav-entry" onclick="showView('entry')">
+      <span class="nav-icon">✏</span>
+      <span class="nav-label">Entry</span>
+    </div>
+    <div class="nav-item" id="nav-log" onclick="showView('log')">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Today</span>
+    </div>
+    <div class="nav-item" id="nav-history" onclick="showView('history')">
+      <span class="nav-icon">📅</span>
+      <span class="nav-label">History</span>
+    </div>
+    <div class="nav-item" id="nav-rates" onclick="showView('rates')">
+      <span class="nav-icon">⚙</span>
+      <span class="nav-label">Rates</span>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const CUSTOMERS = ["Wartsila","Victaulic","Valmet Shrewsbury","Valmet OY","VALMET Mumbai","Valmet Lappeenranta","Kongsberg","Klinger Westad","IAI"];
+const PARTS = [
+  {c:"Wartsila",no:"R1805",d:"Impeller WXJ 720"},{c:"Wartsila",no:"R1804",d:"Stator Bowl WXJ 720"},
+  {c:"Victaulic",no:"R1776",d:"BODY 6\"-461 series"},{c:"Victaulic",no:"R1777",d:"BODY 8\"-461 series"},{c:"Victaulic",no:"R1806",d:"10\" Disc S250"},{c:"Victaulic",no:"R1807",d:"12\" Disc S250"},
+  {c:"Valmet Shrewsbury",no:"R1746",d:"BODY 6 9300 MOD C CF8M"},{c:"Valmet Shrewsbury",no:"R1747",d:"BODY CAP 6 9300 WCB"},{c:"Valmet Shrewsbury",no:"R1778",d:"BODY FEMAL PD06 CF8M"},{c:"Valmet Shrewsbury",no:"R1881",d:"CAST BODY 6 DM150FB WCB"},
+  {c:"Valmet OY",no:"R1732",d:"BODY REJ300 CF8M+"},{c:"Valmet OY",no:"R1787",d:"BODY XJ08/06G F-SEAT CF8M"},{c:"Valmet OY",no:"R1788",d:"BODY CAP XJ08/06G CF8M"},
+  {c:"VALMET Mumbai",no:"R1669",d:"CAST BODY 10 815W CF8M"},{c:"VALMET Mumbai",no:"R1670",d:"CAST BODY 10 815L CF8M"},{c:"VALMET Mumbai",no:"R1671",d:"CAST BODY 12 815L CF8M"},{c:"VALMET Mumbai",no:"R1652",d:"BODY 10 830L CF8M"},{c:"VALMET Mumbai",no:"R1653",d:"BODY 10 830W CF8M"},{c:"VALMET Mumbai",no:"R1654",d:"BODY 12 830L CF8M"},
+  {c:"Valmet Lappeenranta",no:"R1798",d:"BODY SKW600-64 10B A995-1B"},{c:"Valmet Lappeenranta",no:"R1883",d:"BODY SKW500-64 10B WCB"},{c:"Valmet Lappeenranta",no:"R1884",d:"PILOT BODY SKF300-24 10B WCB"},
+  {c:"Kongsberg",no:"R1791",d:"Steering Nozzle S112-4L"},{c:"Kongsberg",no:"R1844",d:"Link Arm S112-4L"},{c:"Kongsberg",no:"R1785",d:"Guide Vane Chamber S160-4L"},{c:"Kongsberg",no:"R1786",d:"Steering Nozzle S160-4L"},{c:"Kongsberg",no:"R1792",d:"Reversing Bucket S112-4L"},{c:"Kongsberg",no:"R1795",d:"Reversing Bucket S160-4L"},{c:"Kongsberg",no:"R1835",d:"Impeller S112-4L-IRS"},{c:"Kongsberg",no:"R1793",d:"Guide Vane Chamber S112-4L"},
+  {c:"Klinger Westad",no:"R1879",d:"Disc LNG 2.0 DN500 CL150"},{c:"Klinger Westad",no:"R1880",d:"Disc LNG 2.0 DN550 CL150"},{c:"Klinger Westad",no:"R1859",d:"Body Butt DN250 PN25"},{c:"Klinger Westad",no:"R1860",d:"Disc LNG DN250 PN25"},{c:"Klinger Westad",no:"R1861",d:"Body Butt DN300 PN25"},{c:"Klinger Westad",no:"R1862",d:"Disc LNG DN300 PN25"},{c:"Klinger Westad",no:"R1865",d:"Disc LNG 2.0 DN450 CL150"},
+  {c:"IAI",no:"R1762",d:"FAI-FIN STRUCTURE AFT"},{c:"IAI",no:"R1763",d:"Steering Fin"},{c:"IAI",no:"R1656",d:"Forward Cone 1"},{c:"IAI",no:"R1657",d:"Forward Cone 2"},{c:"IAI",no:"R1658",d:"Forward Cone 3"},{c:"IAI",no:"R1659",d:"Forward Cone 4"},{c:"IAI",no:"R1660",d:"Cone Adapter"}
+];
+
+const DEFAULT_ITEMS = {
+  rc:[
+    {n:"T C Rotary Cutter Tb-3",r:572.28,u:"Nos"},{n:"T C Rotary Cutter S-7",r:1848,u:"Nos"},
+    {n:"T C Rotary Cutter B-2 200mm Long",r:840.73,u:"Nos"},{n:"T C Rotary Cutter B-2 150mm Long",r:708.31,u:"Nos"},
+    {n:"T C Rotary Cutter B-2",r:288.84,u:"Nos"},{n:"T C Rotary Cutter S-5",r:549.12,u:"Nos"},
+    {n:"T C Rotary Cutter S-2 150mm Long",r:724.95,u:"Nos"},{n:"T C Rotary Cutter S-1 150mm Long",r:670.8,u:"Nos"},
+    {n:"T C Rotary Cutter B-1",r:429.81,u:"Nos"},{n:"T C Rotary Cutter S-1",r:338,u:"Nos"},
+    {n:"T C Rotary Cutter S-4",r:528,u:"Nos"},{n:"T C Rotary Cutter S-3",r:336.7,u:"Nos"},
+    {n:"T C Rotary Cutter S-2",r:299,u:"Nos"},{n:"T C Rotary Cutter TB-2 50mm",r:426,u:"Nos"},
+    {n:"T C Rotary Cutter T-1",r:338,u:"Nos"},{n:"T C Rotary Cutter B-1 200mm Long",r:240,u:"Nos"}
+  ],
+  el:[
+    {n:"Electrode D&H 2093L 4.00mm (E2209-16)",r:1161.06,u:"Kg"},{n:"Electrode S.S.(316L) 4.00mm",r:564.04,u:"Kg"},
+    {n:"Electrode D&H 2093L 5.00mm (E2209-16)",r:1130.87,u:"Kg"},{n:"Electrode D&H 446L 4.00x350mm (E630-16)",r:959,u:"Kg"},
+    {n:"Electrode S.S.(316L) 5.00mm (E-316L-16)",r:540.65,u:"Kg"},{n:"Electrode M.S. 5mm For Cutting",r:137,u:"Kg"},
+    {n:"Electrode D&H 25/5/3 4.00mm (E-2553-16)",r:1802,u:"Kg"},{n:"Electrode D&H 2093L 3.15mm (E2209-16)",r:1170,u:"Kg"},
+    {n:"Electrode Fox C9 MV 4mm (E9015-B9)",r:731.2,u:"Kg"},{n:"Electrode M.S. 3.15mm For Weld",r:114.87,u:"Kg"},
+    {n:"Electrode OK 92.45 4.0x350mm (ENiCrMo-3)",r:4920,u:"Kg"},{n:"Electrode D&H 2594(NS) 4.00mm (E2594-16)",r:2230,u:"Kg"},
+    {n:"Electrode 444L NiMol 4.00mm (E-410-NiMo)",r:689,u:"Kg"},{n:"Electrode S.S.(316L) 3.15mm",r:570.39,u:"Kg"},
+    {n:"Electrode 5mm (E9015-B9)",r:769,u:"Kg"},{n:"Electrode D&H 2594(NS) 3.15mm (E2594-16)",r:2230,u:"Kg"},
+    {n:"Electrode D&H 446L 3.15x350mm (E630-16)",r:959,u:"Kg"},{n:"Electrode 3.15mm (E-310H-16)",r:1274,u:"Kg"},
+    {n:"Electrode 4.00mm (E317L-16)",r:837,u:"Kg"},{n:"Electrode 444L NiMol 3.15mm (E-410-NiMo)",r:689,u:"Kg"},
+    {n:"Electrode Cromotherme-2 4.00x350mm (E9018-B3)",r:19.98,u:"Kg"},{n:"Electrode 4.00mm (E347-16)",r:385,u:"Kg"},
+    {n:"Electrode Superatherm 4mmx450mm",r:12.96,u:"Nos"},{n:"Electrode M.S. 4mm For Weld",r:125,u:"Kg"},
+    {n:"Electrode Fox C9 MV 4mm — per piece",r:30.78,u:"Nos"},{n:"Electrode 3.15mm (E347-16)",r:385,u:"Kg"},
+    {n:"Electrode S.S.(320) 4.00mm (E-320-16)",r:2800,u:"Kg"},{n:"Electrode S.S.(304/308L) 3.15mm",r:270,u:"Kg"},
+    {n:"Electrode S.S.(304/308L) 4mm",r:250.48,u:"Kg"},{n:"Electrode Superatherm 3.15mmx450mm",r:9.5,u:"Nos"}
+  ],
+  wh:[
+    {n:"D C Wheel 180X7X22 23mm (AG 7)",r:116.62,u:"Nos"},{n:"Cut Off Wheel 24\" Indigenous",r:2299.64,u:"Nos"},
+    {n:"Grinding Wheel 16X6X2.5\"",r:3668.91,u:"Nos"},{n:"Grinding Wheel 100X4X16mm",r:31,u:"Nos"},
+    {n:"Mop Wheel 50x25x6mm 60 Grit",r:95,u:"Nos"},{n:"Mop Wheel 50x25x6mm 80 Grit",r:95,u:"Nos"},
+    {n:"Mop Wheel 50mm",r:105.74,u:"Nos"},{n:"D C Wheel 9\" Indigenous",r:283.16,u:"Nos"},
+    {n:"Cut Off Wheel 4\"",r:16.7,u:"Nos"},{n:"Flap Wheel",r:422.96,u:"Nos"},
+    {n:"Polishing Wheel (Unified)",r:55.65,u:"Nos"},{n:"Polishing Wheel Mat 150x25x16mm P1",r:152,u:"Nos"},
+    {n:"Mop Wheel (Standard)",r:61.22,u:"Nos"}
+  ],
+  mp:[
+    {n:"Mounted Point A 11",r:32,u:"Nos"},{n:"Mounted Point A 15",r:25,u:"Nos"},{n:"Mounted Point A-36",r:28,u:"Nos"}
+  ]
+};
+
+const CAT_LABELS = {rc:"Rotary Cutter",el:"Electrode",wh:"Wheel",mp:"Mounted Point"};
+const CAT_KEYS = ['rc','el','wh','mp'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let DB, activeCat = 'rc', rates = {}, todayEntries = [];
+let deferredInstall = null;
+const todayKey = () => new Date().toISOString().split('T')[0];
+
+// ── INDEXEDDB ─────────────────────────────────────────────────────────────────
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('fettling-db', 2);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('entries')) {
+        const store = db.createObjectStore('entries', {keyPath:'id'});
+        store.createIndex('date', 'date', {unique:false});
+      }
+      if (!db.objectStoreNames.contains('rates')) {
+        db.createObjectStore('rates', {keyPath:'name'});
+      }
+    };
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = e => rej(e);
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const tx = DB.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror = rej;
+  });
+}
+
+function dbPut(store, obj) {
+  return new Promise((res, rej) => {
+    const tx = DB.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(obj);
+    req.onsuccess = () => res();
+    req.onerror = rej;
+  });
+}
+
+function dbDelete(store, key) {
+  return new Promise((res, rej) => {
+    const tx = DB.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => res();
+    req.onerror = rej;
+  });
+}
+
+function dbGetByIndex(storeName, indexName, value) {
+  return new Promise((res, rej) => {
+    const tx = DB.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const idx = store.index(indexName);
+    const req = idx.getAll(value);
+    req.onsuccess = () => res(req.result);
+    req.onerror = rej;
+  });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init() {
+  DB = await openDB();
+
+  // Load or seed rates
+  const savedRates = await dbGetAll('rates');
+  if (savedRates.length === 0) {
+    // Seed defaults
+    for (const cat of CAT_KEYS) {
+      for (const item of DEFAULT_ITEMS[cat]) {
+        await dbPut('rates', {name: item.n, rate: item.r, unit: item.u, cat});
+      }
+    }
+    const allRates = await dbGetAll('rates');
+    allRates.forEach(r => { rates[r.name] = r; });
+  } else {
+    savedRates.forEach(r => { rates[r.name] = r; });
+  }
+
+  // Build dropdowns
+  CUSTOMERS.forEach(c => {
+    const o = document.createElement('option'); o.value=c; o.textContent=c;
+    document.getElementById('sel-customer').appendChild(o);
+  });
+
+  // Set date
+  const now = new Date();
+  document.getElementById('today-pill').textContent = now.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+
+  // Load today entries
+  todayEntries = await dbGetByIndex('entries','date', todayKey());
+  todayEntries.sort((a,b)=>a.ts-b.ts);
+
+  loadCatItems('rc');
+  renderLog();
+  buildRatesList();
+  registerSW();
+  setupInstall();
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('nav-'+v).classList.add('active');
+  if (v === 'history') renderHistory();
+}
+
+// ── ENTRY FORM ────────────────────────────────────────────────────────────────
+function filterParts() {
+  const c = document.getElementById('sel-customer').value;
+  const ps = document.getElementById('sel-part');
+  ps.innerHTML = '<option value="">— Select part —</option>';
+  PARTS.filter(p=>p.c===c).forEach(p => {
+    const o = document.createElement('option'); o.value=p.no; o.textContent=p.no+' — '+p.d; ps.appendChild(o);
+  });
+}
+
+function selectCat(cat) {
+  activeCat = cat;
+  CAT_KEYS.forEach(c => {
+    const el = document.getElementById('cat-'+c);
+    el.className = 'cat-btn';
+    if (c===cat) el.classList.add('active-'+c);
+  });
+  loadCatItems(cat);
+  document.getElementById('rate-tag').style.display = 'none';
+  document.getElementById('inp-qty').value = '';
+  document.getElementById('cost-val').textContent = '₹ 0';
+  document.getElementById('sel-item').value = '';
+}
+
+function loadCatItems(cat) {
+  const sel = document.getElementById('sel-item');
+  sel.innerHTML = '<option value="">— Select item —</option>';
+  DEFAULT_ITEMS[cat].forEach(item => {
+    const o = document.createElement('option'); o.value=item.n; o.textContent=item.n; sel.appendChild(o);
+  });
+  document.getElementById('inp-unit').value = cat==='el' ? 'Kg' : 'Nos';
+}
+
+function onItemChange() {
+  const name = document.getElementById('sel-item').value;
+  const tag = document.getElementById('rate-tag');
+  if (!name) { tag.style.display='none'; return; }
+  const r = rates[name] || {rate:0,unit:'Nos'};
+  document.getElementById('rate-val').textContent = r.rate.toFixed(2);
+  document.getElementById('rate-unit').textContent = r.unit;
+  document.getElementById('inp-unit').value = r.unit;
+  tag.style.display = 'inline-flex';
+  calcCost();
+}
+
+function calcCost() {
+  const name = document.getElementById('sel-item').value;
+  const qty = parseFloat(document.getElementById('inp-qty').value)||0;
+  if (!name||!qty) { document.getElementById('cost-val').textContent='₹ 0'; return; }
+  const r = (rates[name]||{rate:0}).rate;
+  document.getElementById('cost-val').textContent = '₹ '+(r*qty).toLocaleString('en-IN',{maximumFractionDigits:2});
+}
+
+async function addEntry() {
+  const cust = document.getElementById('sel-customer').value;
+  const part = document.getElementById('sel-part').value;
+  const name = document.getElementById('sel-item').value;
+  const qty = parseFloat(document.getElementById('inp-qty').value);
+  if (!name) { showToast('Select a consumable item'); return; }
+  if (!qty||qty<=0) { showToast('Enter a valid quantity'); return; }
+  const r = rates[name]||{rate:0,unit:'Nos'};
+  const entry = {
+    id: Date.now()+'',
+    date: todayKey(),
+    ts: Date.now(),
+    customer: cust||'—',
+    part: part||'—',
+    name, qty,
+    unit: document.getElementById('inp-unit').value,
+    rate: r.rate,
+    cost: +(r.rate*qty).toFixed(2),
+    cat: activeCat,
+    catLabel: CAT_LABELS[activeCat]
+  };
+  await dbPut('entries', entry);
+  todayEntries.push(entry);
+  document.getElementById('inp-qty').value='';
+  document.getElementById('cost-val').textContent='₹ 0';
+  renderLog();
+  showToast('✓ Entry saved');
+  showView('log');
+}
+
+// ── LOG ───────────────────────────────────────────────────────────────────────
+function renderLog() {
+  const list = document.getElementById('log-list');
+  if (todayEntries.length===0) {
+    list.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No entries today yet</div></div>';
+    document.getElementById('log-total').textContent='₹ 0';
+    return;
+  }
+  const sorted = [...todayEntries].reverse();
+  list.innerHTML = '<div class="entry-list">'+sorted.map(e=>`
+    <div class="entry-item">
+      <div class="entry-item-top">
+        <div class="entry-item-name">${e.name}</div>
+        <div class="entry-item-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>
+      </div>
+      <div class="entry-item-meta">
+        <span class="tag tag-${e.cat}">${e.catLabel}</span>
+        <span class="entry-sub">${e.qty} ${e.unit} × ₹${e.rate.toFixed(2)}</span>
+        <span class="entry-sub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div class="entry-item-meta" style="margin-top:2px">
+        <span class="entry-sub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span>
+        <button class="btn-sm btn-red" style="margin-left:auto;font-size:10px;padding:4px 8px" onclick="deleteEntry('${e.id}')">Delete</button>
+      </div>
+    </div>`).join('')+'</div>';
+  const total = todayEntries.reduce((s,e)=>s+e.cost,0);
+  document.getElementById('log-total').textContent = '₹'+total.toLocaleString('en-IN',{maximumFractionDigits:2});
+}
+
+async function deleteEntry(id) {
+  await dbDelete('entries', id);
+  todayEntries = todayEntries.filter(e=>e.id!==id);
+  renderLog();
+  showToast('Entry deleted');
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+async function renderHistory() {
+  const all = await dbGetAll('entries');
+  const byDate = {};
+  all.forEach(e => {
+    if (!byDate[e.date]) byDate[e.date]=[];
+    byDate[e.date].push(e);
+  });
+  const dates = Object.keys(byDate).sort().reverse();
+
+  // Stats
+  document.getElementById('stat-days').textContent = dates.length;
+  document.getElementById('stat-entries').textContent = all.length;
+  const now = new Date();
+  const weekStart = new Date(now); weekStart.setDate(now.getDate()-now.getDay());
+  const monthStart = new Date(now.getFullYear(),now.getMonth(),1);
+  const weekTotal = all.filter(e=>new Date(e.date)>=weekStart).reduce((s,e)=>s+e.cost,0);
+  const monthTotal = all.filter(e=>new Date(e.date)>=monthStart).reduce((s,e)=>s+e.cost,0);
+  document.getElementById('stat-week').textContent = '₹'+weekTotal.toLocaleString('en-IN',{maximumFractionDigits:0});
+  document.getElementById('stat-month').textContent = '₹'+monthTotal.toLocaleString('en-IN',{maximumFractionDigits:0});
+
+  const list = document.getElementById('history-list');
+  if (dates.length===0) {
+    list.innerHTML='<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No records yet</div></div>';
+    return;
+  }
+  list.innerHTML = dates.map(date=>{
+    const entries = byDate[date];
+    const total = entries.reduce((s,e)=>s+e.cost,0);
+    const fmtDate = new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+    return `<div class="date-entry" onclick="showDayDetail('${date}')">
+      <div>
+        <div class="date-label">${fmtDate}</div>
+        <div class="date-count">${entries.length} entr${entries.length===1?'y':'ies'}</div>
+      </div>
+      <div class="date-total">₹${total.toLocaleString('en-IN',{maximumFractionDigits:0})}</div>
+    </div>`;
+  }).join('');
+}
+
+async function showDayDetail(date) {
+  const entries = await dbGetByIndex('entries','date',date);
+  entries.sort((a,b)=>a.ts-b.ts);
+  const fmtDate = new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const total = entries.reduce((s,e)=>s+e.cost,0);
+  document.getElementById('modal-title').textContent = fmtDate;
+  document.getElementById('modal-body').innerHTML =
+    `<div style="margin-bottom:14px;display:flex;justify-content:space-between">
+      <span style="font-size:13px;color:var(--text2)">${entries.length} entries</span>
+      <span style="font-size:16px;font-weight:700;color:var(--green)">₹${total.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
+    </div>`+
+    '<div class="entry-list">'+entries.map(e=>`
+    <div class="entry-item">
+      <div class="entry-item-top">
+        <div class="entry-item-name">${e.name}</div>
+        <div class="entry-item-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div>
+      </div>
+      <div class="entry-item-meta">
+        <span class="tag tag-${e.cat}">${e.catLabel}</span>
+        <span class="entry-sub">${e.qty} ${e.unit}</span>
+        <span class="entry-sub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div class="entry-item-meta"><span class="entry-sub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span></div>
+    </div>`).join('')+'</div>';
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target===document.getElementById('modal')) document.getElementById('modal').classList.remove('open');
+}
+
+// ── RATES ─────────────────────────────────────────────────────────────────────
+function buildRatesList() {
+  const el = document.getElementById('rates-list');
+  let html = '';
+  CAT_KEYS.forEach(cat => {
+    html += `<div class="rate-section-header">${CAT_LABELS[cat]}</div>`;
+    DEFAULT_ITEMS[cat].forEach((item,i)=>{
+      const r = (rates[item.n]||{rate:item.r}).rate;
+      html += `<div class="rate-row">
+        <div class="rate-name">${item.n}</div>
+        <div class="rate-input-wrap">
+          <input type="number" value="${r.toFixed(2)}" step="0.01" min="0" id="ri-${cat}-${i}">
+          <button class="save-btn" onclick="saveRate('${cat}',${i},'${item.n}')">Save</button>
+          <span class="saved-ok" id="ro-${cat}-${i}">✓</span>
+        </div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+async function saveRate(cat, i, name) {
+  const val = parseFloat(document.getElementById(`ri-${cat}-${i}`).value);
+  if (isNaN(val)||val<0) return;
+  const unit = DEFAULT_ITEMS[cat].find(x=>x.n===name)?.u || 'Nos';
+  await dbPut('rates', {name, rate:val, unit, cat});
+  rates[name] = {rate:val, unit, cat};
+  const ok = document.getElementById(`ro-${cat}-${i}`);
+  ok.classList.add('show');
+  setTimeout(()=>ok.classList.remove('show'),1500);
+  if (document.getElementById('sel-item').value===name) onItemChange();
+}
+
+// ── PWA ───────────────────────────────────────────────────────────────────────
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+}
+
+function setupInstall() {
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstall = e;
+    document.getElementById('install-banner').classList.add('show');
+  });
+  document.getElementById('install-btn').addEventListener('click', async ()=>{
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    const {outcome} = await deferredInstall.userChoice;
+    if (outcome==='accepted') {
+      document.getElementById('install-banner').classList.remove('show');
+      showToast('App installed!');
+    }
+    deferredInstall = null;
+  });
+  window.addEventListener('appinstalled',()=>{
+    document.getElementById('install-banner').classList.remove('show');
+  });
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+init();
+</script>
+</body>
+</html>
