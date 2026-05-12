@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#2563eb">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Fettling">
@@ -116,6 +116,9 @@ select option{background:#fff;color:#111827;}
 .empty-text{font-size:13px;}
 #install-banner{background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--rsm);padding:12px 14px;margin:16px 16px 0;display:none;align-items:center;gap:10px;}
 #install-banner.show{display:flex;}
+#ios-banner{background:#f0fdf4;border:1px solid #86efac;border-radius:var(--rsm);padding:12px 14px;margin:16px 16px 0;display:none;font-size:12px;color:var(--text2);line-height:1.6;}
+#ios-banner.show{display:block;}
+#ios-banner strong{color:var(--text);display:block;font-size:13px;margin-bottom:4px;}
 .ib-text{flex:1;font-size:12px;color:var(--text2);line-height:1.4;}
 .ib-text strong{color:var(--text);display:block;font-size:13px;margin-bottom:2px;}
 .btn-install{padding:8px 14px;font-size:12px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;}
@@ -136,6 +139,10 @@ select option{background:#fff;color:#111827;}
   <div id="install-banner">
     <div class="ib-text"><strong>Install App</strong>Add to home screen for offline use</div>
     <button class="btn-install" id="install-btn">Install</button>
+  </div>
+  <div id="ios-banner">
+    <strong>📲 Install this App on iPhone</strong>
+    Tap the <strong>Share button</strong> (□↑) at the bottom of Safari, then tap <strong>"Add to Home Screen"</strong>
   </div>
   <div id="content">
 
@@ -794,17 +801,51 @@ function showView(v){
 }
 
 // ── PWA ───────────────────────────────────────────────────────────────────────
-function registerSW(){if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});}
+function registerSW(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js')
+      .then(()=>console.log('SW registered'))
+      .catch(e=>console.log('SW error',e));
+  }
+}
+
 function setupInstall(){
-  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;document.getElementById('install-banner').classList.add('show');});
-  document.getElementById('install-btn').addEventListener('click',async()=>{
-    if(!deferredInstall)return;
-    deferredInstall.prompt();
-    const{outcome}=await deferredInstall.userChoice;
-    if(outcome==='accepted'){document.getElementById('install-banner').classList.remove('show');showToast('App installed!');}
-    deferredInstall=null;
+  const ua = navigator.userAgent.toLowerCase();
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+  const isAndroid = /android/.test(ua);
+  const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+
+  // Already installed — don't show anything
+  if(isInStandaloneMode) return;
+
+  // iOS: show manual instructions (no programmatic install on iOS)
+  if(isIOS){
+    document.getElementById('ios-banner').classList.add('show');
+    return;
+  }
+
+  // Android Chrome: wait for beforeinstallprompt
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstall = e;
+    document.getElementById('install-banner').classList.add('show');
   });
-  window.addEventListener('appinstalled',()=>document.getElementById('install-banner').classList.remove('show'));
+
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if(!deferredInstall) return;
+    deferredInstall.prompt();
+    const {outcome} = await deferredInstall.userChoice;
+    if(outcome === 'accepted'){
+      document.getElementById('install-banner').classList.remove('show');
+      showToast('✓ App installed!');
+    }
+    deferredInstall = null;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    document.getElementById('install-banner').classList.remove('show');
+    showToast('✓ App installed!');
+  });
 }
 
 let toastTimer;
