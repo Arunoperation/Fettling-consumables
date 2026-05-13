@@ -1,9 +1,10 @@
-const CACHE = 'fettling-v3';
+const CACHE = 'fettling-v4';
 const ASSETS = [
   './index.html',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];
 
 self.addEventListener('install', e => {
