@@ -820,7 +820,7 @@ async function exportBOM(mode, dateVal){
   const fname=filenameFor(mode,uidVal).replace('log','bom');
   const wb=XLSX.utils.book_new();
 
-  // Helper to build a BOM sheet grouped by: optionally UID > Customer > Part > Item
+  // Helper to build a BOM sheet
   function buildBOMSheet(sheetRows, title, periodLabel, groupByUID){
     const bomRows=[];
     bomRows.push([title,'','','','','','','','']);
@@ -835,80 +835,87 @@ async function exportBOM(mode, dateVal){
     const cols=groupByUID?['A','B','C','D','E','F','G','H','I']:['A','B','C','D','E','F','G','H'];
     const numCols=groupByUID?9:8;
 
-    // Build grouped structure
-    const grouped={};
-    sheetRows.forEach(e=>{
-      const uid=groupByUID?(e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)'):null;
-      const cust=e.customer||'—';
-      const part=e.part||'—';
-      const item=e.name;
-      const topKey=groupByUID?uid:cust;
-      const midKey=groupByUID?cust:part;
-      if(!grouped[topKey])grouped[topKey]={};
-      if(!grouped[topKey][midKey])grouped[topKey][midKey]={};
-      const bottomKey=groupByUID?part:item;
-      if(!grouped[topKey][midKey][bottomKey]){
-        grouped[topKey][midKey][bottomKey]=groupByUID
-          ?{items:{}}
-          :{cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
-      }
-      if(groupByUID){
-        if(!grouped[topKey][midKey][bottomKey].items[item])
-          grouped[topKey][midKey][bottomKey].items[item]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
-        grouped[topKey][midKey][bottomKey].items[item].totalQty+=e.qty;
-        grouped[topKey][midKey][bottomKey].items[item].totalCost+=e.cost;
-      } else {
-        grouped[topKey][midKey][bottomKey].totalQty+=e.qty;
-        grouped[topKey][midKey][bottomKey].totalCost+=e.cost;
-        grouped[topKey][midKey][bottomKey].cat=e.catLabel;
-        grouped[topKey][midKey][bottomKey].unit=e.unit;
-        grouped[topKey][midKey][bottomKey].rate=e.rate;
-      }
-    });
-
-    let grandTotal=0;
-    Object.keys(grouped).sort().forEach(topKey=>{
-      let topTotal=0;
-      Object.keys(grouped[topKey]).sort().forEach(midKey=>{
-        let midTotal=0;
-        const midGroup=grouped[topKey][midKey];
-        Object.keys(midGroup).sort().forEach(bottomKey=>{
-          if(groupByUID){
-            // bottomKey = part, midKey = customer, topKey = uid
-            const partItems=midGroup[bottomKey].items;
-            Object.keys(partItems).sort().forEach(itemName=>{
-              const d=partItems[itemName];
-              const cost=parseFloat(d.totalCost.toFixed(2));
-              bomRows.push([topKey,midKey,bottomKey,d.cat,itemName,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
-              midTotal+=cost;
-            });
-          } else {
-            // bottomKey = item, midKey = part, topKey = customer
-            const d=midGroup[bottomKey];
-            const cost=parseFloat(d.totalCost.toFixed(2));
-            bomRows.push([topKey,midKey,d.cat,bottomKey,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost,'']);
-            midTotal+=cost;
-          }
-        });
-        // Mid subtotal
-        const midLabel=groupByUID?`  Customer Total: ${midKey}`:`  Part Subtotal: ${bottomKey||midKey}`;
-        const midRow=new Array(numCols).fill('');
-        midRow[groupByUID?1:2]=midLabel;midRow[numCols-1]=parseFloat(midTotal.toFixed(2));
-        bomRows.push(midRow);
-        topTotal+=midTotal;
+    if(groupByUID){
+      // Group: HeatCode > Customer > Part > Item
+      const g={};
+      sheetRows.forEach(e=>{
+        const hc=e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)';
+        const cu=e.customer||'—';
+        const pa=e.part||'—';
+        const it=e.name;
+        if(!g[hc])g[hc]={};
+        if(!g[hc][cu])g[hc][cu]={};
+        if(!g[hc][cu][pa])g[hc][cu][pa]={};
+        if(!g[hc][cu][pa][it])g[hc][cu][pa][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
+        g[hc][cu][pa][it].totalQty+=e.qty;
+        g[hc][cu][pa][it].totalCost+=e.cost;
       });
-      // Top subtotal
-      const topLabel=groupByUID?`  Heat Code Total: ${topKey}`:`  Customer Total: ${topKey}`;
-      const topRow=new Array(numCols).fill('');
-      topRow[groupByUID?0:1]=topLabel;topRow[numCols-1]=parseFloat(topTotal.toFixed(2));
-      bomRows.push(topRow);
-      grandTotal+=topTotal;
-      bomRows.push(new Array(numCols).fill(''));
-    });
-    // Grand total
-    const grandRow=new Array(numCols).fill('');
-    grandRow[0]='GRAND TOTAL';grandRow[numCols-1]=parseFloat(grandTotal.toFixed(2));
-    bomRows.push(grandRow);
+      let grandTotal=0;
+      Object.keys(g).sort().forEach(hc=>{
+        let hcTotal=0;
+        Object.keys(g[hc]).sort().forEach(cu=>{
+          let cuTotal=0;
+          Object.keys(g[hc][cu]).sort().forEach(pa=>{
+            Object.keys(g[hc][cu][pa]).sort().forEach(it=>{
+              const d=g[hc][cu][pa][it];
+              const cost=parseFloat(d.totalCost.toFixed(2));
+              bomRows.push([hc,cu,pa,d.cat,it,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
+              cuTotal+=cost;
+            });
+          });
+          const cuRow=new Array(numCols).fill('');
+          cuRow[1]=`  Customer Total: ${cu}`;cuRow[numCols-1]=parseFloat(cuTotal.toFixed(2));
+          bomRows.push(cuRow);
+          hcTotal+=cuTotal;
+        });
+        const hcRow=new Array(numCols).fill('');
+        hcRow[0]=`  Heat Code Total: ${hc}`;hcRow[numCols-1]=parseFloat(hcTotal.toFixed(2));
+        bomRows.push(hcRow);
+        grandTotal+=hcTotal;
+        bomRows.push(new Array(numCols).fill(''));
+      });
+      const grandRow=new Array(numCols).fill('');
+      grandRow[0]='GRAND TOTAL';grandRow[numCols-1]=parseFloat(grandTotal.toFixed(2));
+      bomRows.push(grandRow);
+    } else {
+      // Group: Customer > Part > Item
+      const g={};
+      sheetRows.forEach(e=>{
+        const cu=e.customer||'—';
+        const pa=e.part||'—';
+        const it=e.name;
+        if(!g[cu])g[cu]={};
+        if(!g[cu][pa])g[cu][pa]={};
+        if(!g[cu][pa][it])g[cu][pa][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
+        g[cu][pa][it].totalQty+=e.qty;
+        g[cu][pa][it].totalCost+=e.cost;
+      });
+      let grandTotal=0;
+      Object.keys(g).sort().forEach(cu=>{
+        let cuTotal=0;
+        Object.keys(g[cu]).sort().forEach(pa=>{
+          let paTotal=0;
+          Object.keys(g[cu][pa]).sort().forEach(it=>{
+            const d=g[cu][pa][it];
+            const cost=parseFloat(d.totalCost.toFixed(2));
+            bomRows.push([cu,pa,d.cat,it,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost,'']);
+            paTotal+=cost;
+          });
+          const paRow=new Array(numCols).fill('');
+          paRow[2]=`  Part Subtotal: ${pa}`;paRow[numCols-2]=parseFloat(paTotal.toFixed(2));
+          bomRows.push(paRow);
+          cuTotal+=paTotal;
+        });
+        const cuRow=new Array(numCols).fill('');
+        cuRow[1]=`  Customer Total: ${cu}`;cuRow[numCols-2]=parseFloat(cuTotal.toFixed(2));
+        bomRows.push(cuRow);
+        grandTotal+=cuTotal;
+        bomRows.push(new Array(numCols).fill(''));
+      });
+      const grandRow=new Array(numCols).fill('');
+      grandRow[0]='GRAND TOTAL';grandRow[numCols-2]=parseFloat(grandTotal.toFixed(2));
+      bomRows.push(grandRow);
+    }
 
     const ws=XLSX.utils.aoa_to_sheet(bomRows);
     ws['!cols']=groupByUID
@@ -920,10 +927,11 @@ async function exportBOM(mode, dateVal){
     bomRows.forEach((r,i)=>{
       const rowNum=i+1;
       const isGrand=r[0]==='GRAND TOTAL';
-      const isTopSub=typeof r[groupByUID?0:1]==='string'&&(r[groupByUID?0:1].startsWith('  Heat Code Total')||r[groupByUID?0:1].startsWith('  Customer Total'));
-      const isMidSub=typeof r[groupByUID?1:2]==='string'&&(r[groupByUID?1:2].startsWith('  Customer Total')||r[groupByUID?1:2].startsWith('  Part Subtotal'));
-      if(isMidSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{italic:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'F0F9FF'}}};});
-      if(isTopSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'DBEAFE'}}};});
+      const isHeatSub=typeof r[0]==='string'&&r[0].startsWith('  Heat Code Total');
+      const isCustSub=typeof r[1]==='string'&&r[1].startsWith('  Customer Total');
+      const isPartSub=typeof r[2]==='string'&&r[2].startsWith('  Part Subtotal');
+      if(isPartSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{italic:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'F0F9FF'}}};});
+      if(isCustSub||isHeatSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'DBEAFE'}}};});
       if(isGrand) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'},name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'16A34A'}}};});
     });
     ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:bomRows.length-1,c:numCols-1}});
