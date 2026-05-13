@@ -813,7 +813,6 @@ async function exportExcel(mode, dateVal){
 async function exportBOM(mode, dateVal){
   try{
   if(typeof XLSX==='undefined'){showToast('Excel library not loaded. Check internet connection.');return;}
-  // For 'uid' mode, use the UID search box value if no dateVal provided
   let uidVal=dateVal;
   if(mode==='uid'&&!uidVal){
     uidVal=(document.getElementById('uid-search')?.value||'').trim();
@@ -823,137 +822,153 @@ async function exportBOM(mode, dateVal){
   if(!rows.length){showToast('No entries to export');return;}
   const fname=filenameFor(mode,uidVal).replace('log','bom');
   const wb=XLSX.utils.book_new();
+  const periodLabel=mode==='today'?`Date: ${todayKey()}`:mode==='month'?`Month: ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}`:mode==='date'?`Date: ${dateVal}`:mode==='uid'?`Heat Code: ${uidVal}`:'All Records';
 
-  // Helper to build a BOM sheet
-  function buildBOMSheet(sheetRows, title, periodLabel, groupByUID){
-    const bomRows=[];
-    bomRows.push([title,'','','','','','','','']);
-    bomRows.push([periodLabel,'','','','','','','','']);
-    bomRows.push([]);
-    if(groupByUID){
-      bomRows.push(['Heat Code','Customer','Part No.','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)']);
-    } else {
-      bomRows.push(['Customer','Part No.','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)','']);
-    }
-    const hdrRowNum=4;
-    const cols=groupByUID?['A','B','C','D','E','F','G','H','I']:['A','B','C','D','E','F','G','H'];
-    const numCols=groupByUID?9:8;
+  // ── COLUMNS (fixed, always 9): Heat Code | Customer | Part No. | Category | Item | Unit | Total Qty | Rate (₹) | Total Cost (₹)
+  // col index:                        0           1          2          3        4      5        6            7            8
+  const COLS=['A','B','C','D','E','F','G','H','I'];
+  const NUM_COLS=9;
 
-    if(groupByUID){
-      // Group: HeatCode > Customer > Part > Item
-      const g={};
-      sheetRows.forEach(e=>{
-        const hc=e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)';
-        const cu=e.customer||'—';
-        const pa=e.part||'—';
-        const it=e.name;
-        if(!g[hc])g[hc]={};
-        if(!g[hc][cu])g[hc][cu]={};
-        if(!g[hc][cu][pa])g[hc][cu][pa]={};
-        if(!g[hc][cu][pa][it])g[hc][cu][pa][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
-        g[hc][cu][pa][it].totalQty+=e.qty;
-        g[hc][cu][pa][it].totalCost+=e.cost;
-      });
-      let grandTotal=0;
-      Object.keys(g).sort().forEach(hc=>{
-        let hcTotal=0;
-        Object.keys(g[hc]).sort().forEach(cu=>{
-          let cuTotal=0;
-          Object.keys(g[hc][cu]).sort().forEach(pa=>{
-            Object.keys(g[hc][cu][pa]).sort().forEach(it=>{
-              const d=g[hc][cu][pa][it];
-              const cost=parseFloat(d.totalCost.toFixed(2));
-              bomRows.push([hc,cu,pa,d.cat,it,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
-              cuTotal+=cost;
-            });
-          });
-          const cuRow=new Array(numCols).fill('');
-          cuRow[1]=`  Customer Total: ${cu}`;cuRow[numCols-1]=parseFloat(cuTotal.toFixed(2));
-          bomRows.push(cuRow);
-          hcTotal+=cuTotal;
-        });
-        const hcRow=new Array(numCols).fill('');
-        hcRow[0]=`  Heat Code Total: ${hc}`;hcRow[numCols-1]=parseFloat(hcTotal.toFixed(2));
-        bomRows.push(hcRow);
-        grandTotal+=hcTotal;
-        bomRows.push(new Array(numCols).fill(''));
-      });
-      const grandRow=new Array(numCols).fill('');
-      grandRow[0]='GRAND TOTAL';grandRow[numCols-1]=parseFloat(grandTotal.toFixed(2));
-      bomRows.push(grandRow);
-    } else {
-      // Group: Customer > Part > Item
-      const g={};
-      sheetRows.forEach(e=>{
-        const cu=e.customer||'—';
-        const pa=e.part||'—';
-        const it=e.name;
-        if(!g[cu])g[cu]={};
-        if(!g[cu][pa])g[cu][pa]={};
-        if(!g[cu][pa][it])g[cu][pa][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
-        g[cu][pa][it].totalQty+=e.qty;
-        g[cu][pa][it].totalCost+=e.cost;
-      });
-      let grandTotal=0;
-      Object.keys(g).sort().forEach(cu=>{
+  // ── SHEET 1: Grouped by Heat Code > Customer > Part > Item ──────────────────
+  function buildHeatBOM(sheetRows){
+    const rows2=[];
+    rows2.push(['FETTLING CONSUMABLES — BOM BY HEAT CODE','','','','','','','','']);
+    rows2.push([periodLabel,'','','','','','','','']);
+    rows2.push([]);
+    rows2.push(['Heat Code','Customer','Part No.','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)']);
+
+    // Group: HeatCode > Customer > Part > Item
+    const g={};
+    sheetRows.forEach(e=>{
+      const hc=e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)';
+      const cu=e.customer||'—'; const pa=e.part||'—'; const it=e.name;
+      if(!g[hc])g[hc]={};
+      if(!g[hc][cu])g[hc][cu]={};
+      if(!g[hc][cu][pa])g[hc][cu][pa]={};
+      if(!g[hc][cu][pa][it])g[hc][cu][pa][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,qty:0,cost:0};
+      g[hc][cu][pa][it].qty+=e.qty;
+      g[hc][cu][pa][it].cost+=e.cost;
+    });
+
+    let grandTotal=0;
+    Object.keys(g).sort().forEach(hc=>{
+      let hcTotal=0;
+      Object.keys(g[hc]).sort().forEach(cu=>{
         let cuTotal=0;
-        Object.keys(g[cu]).sort().forEach(pa=>{
+        Object.keys(g[hc][cu]).sort().forEach(pa=>{
           let paTotal=0;
-          Object.keys(g[cu][pa]).sort().forEach(it=>{
-            const d=g[cu][pa][it];
-            const cost=parseFloat(d.totalCost.toFixed(2));
-            bomRows.push([cu,pa,d.cat,it,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost,'']);
+          Object.keys(g[hc][cu][pa]).sort().forEach(it=>{
+            const d=g[hc][cu][pa][it];
+            const cost=parseFloat(d.cost.toFixed(2));
+            rows2.push([hc,cu,pa,d.cat,it,d.unit,parseFloat(d.qty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
             paTotal+=cost;
           });
-          const paRow=new Array(numCols).fill('');
-          paRow[2]=`  Part Subtotal: ${pa}`;paRow[numCols-2]=parseFloat(paTotal.toFixed(2));
-          bomRows.push(paRow);
-          cuTotal+=paTotal;
+          // Part subtotal
+          const r=new Array(NUM_COLS).fill('');
+          r[3]=`  ↳ Part Total: ${pa}`; r[8]=parseFloat(paTotal.toFixed(2));
+          rows2.push(r); cuTotal+=paTotal;
         });
-        const cuRow=new Array(numCols).fill('');
-        cuRow[1]=`  Customer Total: ${cu}`;cuRow[numCols-2]=parseFloat(cuTotal.toFixed(2));
-        bomRows.push(cuRow);
-        grandTotal+=cuTotal;
-        bomRows.push(new Array(numCols).fill(''));
+        // Customer subtotal
+        const r=new Array(NUM_COLS).fill('');
+        r[2]=`  ↳ Customer Total: ${cu}`; r[8]=parseFloat(cuTotal.toFixed(2));
+        rows2.push(r); hcTotal+=cuTotal;
       });
-      const grandRow=new Array(numCols).fill('');
-      grandRow[0]='GRAND TOTAL';grandRow[numCols-2]=parseFloat(grandTotal.toFixed(2));
-      bomRows.push(grandRow);
-    }
+      // Heat code subtotal
+      const r=new Array(NUM_COLS).fill('');
+      r[0]=`↳ Heat Code Total: ${hc}`; r[8]=parseFloat(hcTotal.toFixed(2));
+      rows2.push(r);
+      grandTotal+=hcTotal;
+      rows2.push(new Array(NUM_COLS).fill(''));
+    });
+    const gr=new Array(NUM_COLS).fill('');
+    gr[0]='GRAND TOTAL'; gr[8]=parseFloat(grandTotal.toFixed(2));
+    rows2.push(gr);
+    return rows2;
+  }
 
+  // ── SHEET 2: Grouped by Customer > Part > Heat Code > Item ──────────────────
+  function buildPartBOM(sheetRows){
+    const rows2=[];
+    rows2.push(['FETTLING CONSUMABLES — BOM BY PART','','','','','','','','']);
+    rows2.push([periodLabel,'','','','','','','','']);
+    rows2.push([]);
+    rows2.push(['Customer','Part No.','Heat Code','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)']);
+
+    // Group: Customer > Part > HeatCode > Item
+    const g={};
+    sheetRows.forEach(e=>{
+      const cu=e.customer||'—'; const pa=e.part||'—';
+      const hc=e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)'; const it=e.name;
+      if(!g[cu])g[cu]={};
+      if(!g[cu][pa])g[cu][pa]={};
+      if(!g[cu][pa][hc])g[cu][pa][hc]={};
+      if(!g[cu][pa][hc][it])g[cu][pa][hc][it]={cat:e.catLabel,unit:e.unit,rate:e.rate,qty:0,cost:0};
+      g[cu][pa][hc][it].qty+=e.qty;
+      g[cu][pa][hc][it].cost+=e.cost;
+    });
+
+    let grandTotal=0;
+    Object.keys(g).sort().forEach(cu=>{
+      let cuTotal=0;
+      Object.keys(g[cu]).sort().forEach(pa=>{
+        let paTotal=0;
+        Object.keys(g[cu][pa]).sort().forEach(hc=>{
+          let hcTotal=0;
+          Object.keys(g[cu][pa][hc]).sort().forEach(it=>{
+            const d=g[cu][pa][hc][it];
+            const cost=parseFloat(d.cost.toFixed(2));
+            rows2.push([cu,pa,hc,d.cat,it,d.unit,parseFloat(d.qty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
+            hcTotal+=cost;
+          });
+          // Heat code subtotal per part
+          const r=new Array(NUM_COLS).fill('');
+          r[3]=`  ↳ Heat Code Total: ${hc}`; r[8]=parseFloat(hcTotal.toFixed(2));
+          rows2.push(r); paTotal+=hcTotal;
+        });
+        // Part subtotal
+        const r=new Array(NUM_COLS).fill('');
+        r[2]=`  ↳ Part Total: ${pa}`; r[8]=parseFloat(paTotal.toFixed(2));
+        rows2.push(r); cuTotal+=paTotal;
+      });
+      // Customer subtotal
+      const r=new Array(NUM_COLS).fill('');
+      r[1]=`↳ Customer Total: ${cu}`; r[8]=parseFloat(cuTotal.toFixed(2));
+      rows2.push(r);
+      grandTotal+=cuTotal;
+      rows2.push(new Array(NUM_COLS).fill(''));
+    });
+    const gr=new Array(NUM_COLS).fill('');
+    gr[0]='GRAND TOTAL'; gr[8]=parseFloat(grandTotal.toFixed(2));
+    rows2.push(gr);
+    return rows2;
+  }
+
+  function makeSheet(bomRows){
     const ws=XLSX.utils.aoa_to_sheet(bomRows);
-    ws['!cols']=groupByUID
-      ?[{wch:20},{wch:20},{wch:12},{wch:14},{wch:30},{wch:7},{wch:10},{wch:12},{wch:14}]
-      :[{wch:22},{wch:14},{wch:16},{wch:32},{wch:7},{wch:10},{wch:12},{wch:14},{wch:4}];
+    ws['!cols']=[{wch:22},{wch:20},{wch:14},{wch:16},{wch:32},{wch:7},{wch:10},{wch:12},{wch:14}];
     if(ws['A1'])ws['A1'].s={font:{bold:true,sz:13,name:'Arial',color:{rgb:'1E3A5F'}}};
     if(ws['A2'])ws['A2'].s={font:{italic:true,name:'Arial',color:{rgb:'555555'}}};
-    applyHdrStyle(ws,cols,hdrRowNum);
+    applyHdrStyle(ws,COLS,4);
     bomRows.forEach((r,i)=>{
-      const rowNum=i+1;
+      const rn=i+1;
       const isGrand=r[0]==='GRAND TOTAL';
-      const isHeatSub=typeof r[0]==='string'&&r[0].startsWith('  Heat Code Total');
-      const isCustSub=typeof r[1]==='string'&&r[1].startsWith('  Customer Total');
-      const isPartSub=typeof r[2]==='string'&&r[2].startsWith('  Part Subtotal');
-      if(isPartSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{italic:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'F0F9FF'}}};});
-      if(isCustSub||isHeatSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'DBEAFE'}}};});
-      if(isGrand) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'},name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'16A34A'}}};});
+      const isHeat=typeof r[0]==='string'&&r[0].startsWith('↳ Heat Code Total');
+      const isCust=typeof r[1]==='string'&&r[1].startsWith('↳ Customer Total');
+      const isPartSub=(typeof r[2]==='string'&&r[2].startsWith('  ↳ Part Total'))||(typeof r[3]==='string'&&r[3].startsWith('  ↳ Part Total'));
+      const isHeatSub=(typeof r[3]==='string'&&r[3].startsWith('  ↳ Heat Code Total'))||(typeof r[2]==='string'&&r[2].startsWith('  ↳ Heat Code Total'));
+      if(isPartSub||isHeatSub) COLS.forEach(c=>{const cell=ws[c+rn];if(cell)cell.s={font:{italic:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'F0F9FF'}}};});
+      if(isHeat||isCust) COLS.forEach(c=>{const cell=ws[c+rn];if(cell)cell.s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'DBEAFE'}}};});
+      if(isGrand) COLS.forEach(c=>{const cell=ws[c+rn];if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'},name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'16A34A'}}};});
     });
-    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:bomRows.length-1,c:numCols-1}});
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:bomRows.length-1,c:NUM_COLS-1}});
     return ws;
   }
 
-  const periodLabel=mode==='today'?`Date: ${todayKey()}`:mode==='month'?`Month: ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}`:mode==='date'?`Date: ${dateVal}`:mode==='uid'?`Heat Code: ${uidVal}`:'All Records';
+  // Sheet 1: By Heat Code > Customer > Part > Item
+  XLSX.utils.book_append_sheet(wb, makeSheet(buildHeatBOM(rows)), 'BOM by Heat Code');
 
-  // Sheet 1: BOM by Customer > Part > Item
-  const wsBOM=buildBOMSheet(rows,'FETTLING CONSUMABLES — BOM SUMMARY',periodLabel,false);
-  XLSX.utils.book_append_sheet(wb,wsBOM,'BOM (Customer-Part)');
-
-  // Sheet 2: BOM by UID > Customer > Part > Item (only if entries have UIDs)
-  const hasUIDs=rows.some(e=>e.uid&&e.uid!=='—');
-  if(hasUIDs||mode==='uid'){
-    const wsUID=buildBOMSheet(rows,'FETTLING CONSUMABLES — HEAT CODE BOM',periodLabel,true);
-    XLSX.utils.book_append_sheet(wb,wsUID,'BOM (by Heat Code)');
-  }
+  // Sheet 2: By Customer > Part > Heat Code > Item
+  XLSX.utils.book_append_sheet(wb, makeSheet(buildPartBOM(rows)), 'BOM by Part');
 
   // Sheet 3: Item-wise consolidated
   const itemMap={};
