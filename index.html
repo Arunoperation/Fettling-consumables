@@ -9,7 +9,6 @@
 <meta name="apple-mobile-web-app-title" content="Fettling">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <title>Fettling Consumables</title>
 <style>
 :root{--bg:#f0f2f5;--bg2:#ffffff;--bg3:#f8f9fb;--bg4:#eef0f4;--accent:#2563eb;--green:#16a34a;--amber:#d97706;--red:#dc2626;--purple:#7c3aed;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--border:rgba(0,0,0,0.07);--border2:rgba(0,0,0,0.13);--radius:14px;--rsm:8px;}
@@ -782,6 +781,8 @@ function applySubHdrStyle(ws, cols, row, rgb){
 
 // ── RAW LOG EXPORT ────────────────────────────────────────────────────────────
 async function exportExcel(mode, dateVal){
+  try{
+  if(typeof XLSX==='undefined'){showToast('Excel library not loaded. Check internet connection.');return;}
   const rows=(await getFilteredRows(mode,dateVal)).sort((a,b)=>a.ts-b.ts);
   if(!rows.length){showToast('No entries to export');return;}
   const fname=filenameFor(mode,dateVal);
@@ -805,10 +806,13 @@ async function exportExcel(mode, dateVal){
   XLSX.utils.book_append_sheet(wb,ws,'Consumption Log');
   XLSX.writeFile(wb,fname+'.xlsx');
   showToast(`✓ Exported ${rows.length} rows`);
+  }catch(err){showToast('Export failed: '+err.message);console.error('Log export error:',err);}
 }
 
 // ── BOM EXPORT ────────────────────────────────────────────────────────────────
 async function exportBOM(mode, dateVal){
+  try{
+  if(typeof XLSX==='undefined'){showToast('Excel library not loaded. Check internet connection.');return;}
   // For 'uid' mode, use the UID search box value if no dateVal provided
   let uidVal=dateVal;
   if(mode==='uid'&&!uidVal){
@@ -976,6 +980,7 @@ async function exportBOM(mode, dateVal){
 
   XLSX.writeFile(wb,fname+'.xlsx');
   showToast(`✓ BOM exported — ${Object.keys(itemMap).length} items`);
+  }catch(err){showToast('Export failed: '+err.message);console.error('BOM export error:',err);}
 }
 
 // ── MANAGE: CUSTOMERS ─────────────────────────────────────────────────────────
@@ -1240,5 +1245,6 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 init();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>
