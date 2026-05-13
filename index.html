@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Fettling">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <title>Fettling Consumables</title>
 <style>
 :root{--bg:#f0f2f5;--bg2:#ffffff;--bg3:#f8f9fb;--bg4:#eef0f4;--accent:#2563eb;--green:#16a34a;--amber:#d97706;--red:#dc2626;--purple:#7c3aed;--text:#111827;--text2:#4b5563;--text3:#9ca3af;--border:rgba(0,0,0,0.07);--border2:rgba(0,0,0,0.13);--radius:14px;--rsm:8px;}
@@ -116,6 +117,10 @@ select option{background:#fff;color:#111827;}
 .empty-text{font-size:13px;}
 #install-banner{display:none;}
 .btn-install{width:100%;padding:14px;font-size:15px;font-weight:600;background:var(--accent);color:#fff;border:none;border-radius:var(--rsm);cursor:pointer;}
+.export-bar{display:flex;gap:8px;margin-bottom:12px;}
+.export-bar .btn-sm{flex:1;text-align:center;padding:10px 8px;font-size:12px;}
+.edit-field{margin-bottom:10px;}
+.edit-field .lbl{font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500;}
 .btn-install:active{opacity:.85;}
 .install-card{background:#eff6ff;border:1px solid #93c5fd;border-radius:var(--radius);padding:16px;margin-bottom:12px;}
 .install-steps{font-size:13px;color:var(--text2);line-height:2;margin:10px 0 14px;}
@@ -192,11 +197,19 @@ select option{background:#fff;color:#111827;}
         <div class="tb-lbl">Today's Total</div>
         <div class="tb-val" id="log-total">₹ 0</div>
       </div>
+      <div class="export-bar">
+        <button class="btn-sm btn-green2" onclick="exportCSV('today')">⬇ Export Today Excel</button>
+        <button class="btn-sm btn-blue" onclick="exportCSV('all')">⬇ Export All Excel</button>
+      </div>
       <div id="log-list"></div>
     </div>
 
     <!-- HISTORY -->
     <div class="view" id="view-history">
+      <div class="export-bar" style="margin-bottom:10px;">
+        <button class="btn-sm btn-green2" onclick="exportCSV('month')">⬇ This Month Excel</button>
+        <button class="btn-sm btn-blue" onclick="exportCSV('all')">⬇ All Records Excel</button>
+      </div>
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-lbl">Days Recorded</div><div class="stat-val" id="stat-days">0</div></div>
         <div class="stat-card"><div class="stat-lbl">Total Entries</div><div class="stat-val amber" id="stat-entries">0</div></div>
@@ -582,7 +595,7 @@ function renderLog(){
     <div class="entry-item">
       <div class="ei-top"><div class="ei-name">${e.name}</div><div class="ei-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div></div>
       <div class="ei-meta"><span class="tag tag-${e.cat}">${e.catLabel}</span><span class="esub">${e.qty} ${e.unit} × ₹${e.rate.toFixed(2)}</span><span class="esub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
-      <div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span><button class="btn-sm btn-red2" style="margin-left:auto" onclick="deleteEntry('${e.id}')">Delete</button></div>
+      <div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span><div style="display:flex;gap:6px;margin-left:auto"><button class="btn-sm btn-amber" onclick="openEditModal('${e.id}')">Edit</button><button class="btn-sm btn-red2" onclick="deleteEntry('${e.id}')">Delete</button></div></div>
     </div>`).join('')+'</div>';
   document.getElementById('log-total').textContent='₹'+todayEntries.reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:2});
 }
@@ -622,11 +635,130 @@ async function showDayDetail(date){
   const fd=new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const total=entries.reduce((s,e)=>s+e.cost,0);
   document.getElementById('modal-title').textContent=fd;
-  document.getElementById('modal-body').innerHTML=`<div style="margin-bottom:14px;display:flex;justify-content:space-between"><span style="font-size:13px;color:var(--text2)">${entries.length} entries</span><span style="font-size:16px;font-weight:700;color:var(--green)">₹${total.toLocaleString('en-IN',{maximumFractionDigits:2})}</span></div>`+
-  '<div class="entry-list">'+entries.map(e=>`<div class="entry-item"><div class="ei-top"><div class="ei-name">${e.name}</div><div class="ei-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div></div><div class="ei-meta"><span class="tag tag-${e.cat}">${e.catLabel}</span><span class="esub">${e.qty} ${e.unit}</span><span class="esub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div><div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span></div></div>`).join('')+'</div>';
+  document.getElementById('modal-body').innerHTML=
+    `<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+       <span style="font-size:13px;color:var(--text2)">${entries.length} entries</span>
+       <div style="display:flex;gap:8px;align-items:center">
+         <button class="btn-sm btn-green2" onclick="exportCSV('date','${date}')">⬇ Excel</button>
+         <span style="font-size:16px;font-weight:700;color:var(--green)">₹${total.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
+       </div>
+     </div>`+
+  '<div class="entry-list">'+entries.map(e=>`
+    <div class="entry-item">
+      <div class="ei-top"><div class="ei-name">${e.name}</div><div class="ei-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div></div>
+      <div class="ei-meta"><span class="tag tag-${e.cat}">${e.catLabel}</span><span class="esub">${e.qty} ${e.unit}</span><span class="esub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span><div style="display:flex;gap:6px;margin-left:auto"><button class="btn-sm btn-amber" onclick="openEditModal('${e.id}','${date}')">Edit</button><button class="btn-sm btn-red2" onclick="deleteEntryFromModal('${e.id}','${date}')">Delete</button></div></div>
+    </div>`).join('')+'</div>';
   document.getElementById('modal').classList.add('open');
 }
 function closeModal(e){if(e.target===document.getElementById('modal'))document.getElementById('modal').classList.remove('open');}
+
+// ── EDIT ENTRY ────────────────────────────────────────────────────────────────
+async function openEditModal(id, returnDate){
+  const all=await dbGetAll('entries');
+  const entry=all.find(e=>e.id===id);
+  if(!entry)return;
+  document.getElementById('modal-title').textContent='Edit Entry';
+  document.getElementById('modal-body').innerHTML=`
+    <div class="edit-field"><div class="lbl">Consumable Item</div><input type="text" id="edit-name" value="${entry.name}" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div class="edit-field" style="margin-bottom:0"><div class="lbl">Quantity</div><input type="number" id="edit-qty" value="${entry.qty}" min="0" step="0.01" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
+      <div class="edit-field" style="margin-bottom:0"><div class="lbl">Rate (₹)</div><input type="number" id="edit-rate" value="${entry.rate}" min="0" step="0.01" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
+    </div>
+    <div class="edit-field"><div class="lbl">Customer</div><input type="text" id="edit-customer" value="${entry.customer==='—'?'':entry.customer}" placeholder="Customer name" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
+    <div class="edit-field"><div class="lbl">Part No.</div><input type="text" id="edit-part" value="${entry.part==='—'?'':entry.part}" placeholder="Part number" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
+    <button class="btn-primary" style="margin-top:4px" onclick="saveEditEntry('${id}','${returnDate||''}')">✓ Save Changes</button>
+  `;
+  document.getElementById('modal').classList.add('open');
+}
+
+async function saveEditEntry(id, returnDate){
+  const all=await dbGetAll('entries');
+  const entry=all.find(e=>e.id===id);
+  if(!entry)return;
+  const name=document.getElementById('edit-name').value.trim()||entry.name;
+  const qty=parseFloat(document.getElementById('edit-qty').value)||entry.qty;
+  const rate=parseFloat(document.getElementById('edit-rate').value);
+  const customer=document.getElementById('edit-customer').value.trim()||'—';
+  const part=document.getElementById('edit-part').value.trim()||'—';
+  const cost=+((isNaN(rate)?entry.rate:rate)*qty).toFixed(2);
+  const updated={...entry,name,qty,rate:isNaN(rate)?entry.rate:rate,cost,customer,part};
+  await dbPut('entries',updated);
+  // update todayEntries cache if it's today
+  const idx=todayEntries.findIndex(e=>e.id===id);
+  if(idx>=0)todayEntries[idx]=updated;
+  document.getElementById('modal').classList.remove('open');
+  renderLog();
+  if(returnDate)setTimeout(()=>showDayDetail(returnDate),300);
+  showToast('✓ Entry updated');
+}
+
+async function deleteEntryFromModal(id, date){
+  if(!confirm('Delete this entry?'))return;
+  await dbDelete('entries',id);
+  todayEntries=todayEntries.filter(e=>e.id!==id);
+  renderLog();
+  document.getElementById('modal').classList.remove('open');
+  setTimeout(()=>showDayDetail(date),300);
+  showToast('Entry deleted');
+}
+
+// ── EXPORT EXCEL ──────────────────────────────────────────────────────────────
+async function exportCSV(mode, dateVal){
+  const all=await dbGetAll('entries');
+  let rows=all;
+  let filename='fettling-all.xlsx';
+  const now=new Date();
+  if(mode==='today'){
+    rows=all.filter(e=>e.date===todayKey());
+    filename=`fettling-${todayKey()}.xlsx`;
+  } else if(mode==='month'){
+    const mStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
+    rows=all.filter(e=>e.date>=mStart);
+    filename=`fettling-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.xlsx`;
+  } else if(mode==='date'&&dateVal){
+    rows=all.filter(e=>e.date===dateVal);
+    filename=`fettling-${dateVal}.xlsx`;
+  }
+  rows.sort((a,b)=>a.ts-b.ts);
+
+  if(!rows.length){showToast('No entries to export');return;}
+
+  // Build worksheet data
+  const wsData=[
+    ['Date','Time','Customer','Part No.','Category','Item','Qty','Unit','Rate (₹)','Cost (₹)'],
+    ...rows.map(e=>[
+      e.date,
+      new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+      e.customer, e.part, e.catLabel, e.name,
+      e.qty, e.unit,
+      parseFloat(e.rate.toFixed(2)),
+      parseFloat(e.cost.toFixed(2))
+    ])
+  ];
+
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column widths
+  ws['!cols']=[{wch:12},{wch:8},{wch:20},{wch:12},{wch:16},{wch:30},{wch:8},{wch:6},{wch:12},{wch:12}];
+
+  // Bold header row
+  const hdrStyle={font:{bold:true},fill:{fgColor:{rgb:'2563EB'}},font:{bold:true,color:{rgb:'FFFFFF'}}};
+  ['A1','B1','C1','D1','E1','F1','G1','H1','I1','J1'].forEach(cell=>{
+    if(ws[cell])ws[cell].s=hdrStyle;
+  });
+
+  // Add totals row
+  const lastRow=wsData.length+1;
+  ws[`I${lastRow}`]={v:'TOTAL',t:'s',s:{font:{bold:true}}};
+  ws[`J${lastRow}`]={f:`SUM(J2:J${lastRow-1})`,t:'n',s:{font:{bold:true}}};
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow-1,c:9}});
+
+  XLSX.utils.book_append_sheet(wb,ws,'Fettling Log');
+  XLSX.writeFile(wb,filename);
+  showToast(`✓ Exported ${rows.length} rows to Excel`);
+}
 
 // ── MANAGE: CUSTOMERS ─────────────────────────────────────────────────────────
 async function addCustomer(){
