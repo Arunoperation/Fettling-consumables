@@ -149,6 +149,11 @@ select option{background:#fff;color:#111827;}
       <div class="card">
         <div class="card-title">Job Details</div>
         <div class="field">
+          <div class="lbl">Heat Code/UID</div>
+          <input type="text" id="inp-uid" placeholder="e.g. H-130526-01" style="font-family:monospace;letter-spacing:.5px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Unique per heat/job — all consumables logged under this code are tracked together across months</div>
+        </div>
+        <div class="field">
           <div class="lbl">Customer</div>
           <select id="sel-customer" onchange="filterParts()"><option value="">— Select customer —</option></select>
         </div>
@@ -198,8 +203,9 @@ select option{background:#fff;color:#111827;}
         <div class="tb-val" id="log-total">₹ 0</div>
       </div>
       <div class="export-bar">
-        <button class="btn-sm btn-green2" onclick="exportCSV('today')">⬇ Export Today Excel</button>
-        <button class="btn-sm btn-blue" onclick="exportCSV('all')">⬇ Export All Excel</button>
+        <button class="btn-sm btn-green2" onclick="exportExcel('today')">⬇ Today Log</button>
+        <button class="btn-sm btn-blue" onclick="exportExcel('all')">⬇ All Log</button>
+        <button class="btn-sm btn-amber" onclick="exportBOM('today')">📊 Today BOM</button>
       </div>
       <div id="log-list"></div>
     </div>
@@ -207,8 +213,17 @@ select option{background:#fff;color:#111827;}
     <!-- HISTORY -->
     <div class="view" id="view-history">
       <div class="export-bar" style="margin-bottom:10px;">
-        <button class="btn-sm btn-green2" onclick="exportCSV('month')">⬇ This Month Excel</button>
-        <button class="btn-sm btn-blue" onclick="exportCSV('all')">⬇ All Records Excel</button>
+        <button class="btn-sm btn-green2" onclick="exportExcel('month')">⬇ Month Log</button>
+        <button class="btn-sm btn-blue" onclick="exportExcel('all')">⬇ All Log</button>
+        <button class="btn-sm btn-amber" onclick="exportBOM('all')">📊 Full BOM</button>
+        <button class="btn-sm" style="background:rgba(124,58,237,.12);color:#7c3aed;border:1px solid rgba(124,58,237,.25)" onclick="exportBOM('uid')">🔥 Heat BOM</button>
+      </div>
+      <div class="card" style="margin-bottom:12px;padding:12px 14px;">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="uid-search" placeholder="🔍 Search by Heat Code…" style="flex:1;padding:9px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:13px;font-family:monospace;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase();renderHistory()">
+          <button class="btn-sm btn-amber" onclick="document.getElementById('uid-search').value='';renderHistory()">✕</button>
+        </div>
+        <div id="uid-filter-info" style="font-size:11px;color:var(--text3);margin-top:6px;display:none"></div>
       </div>
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-lbl">Days Recorded</div><div class="stat-val" id="stat-days">0</div></div>
@@ -574,10 +589,11 @@ async function addEntry(){
   const part=document.getElementById('sel-part').value;
   const name=document.getElementById('sel-item').value;
   const qty=parseFloat(document.getElementById('inp-qty').value);
+  const uid=document.getElementById('inp-uid').value.trim()||'—';
   if(!name){showToast('Select a consumable item');return;}
   if(!qty||qty<=0){showToast('Enter a valid quantity');return;}
   const r=rates[name]||{rate:0,unit:'Nos'};
-  const entry={id:Date.now()+'',date:todayKey(),ts:Date.now(),customer:cust||'—',part:part||'—',name,qty,unit:document.getElementById('inp-unit').value,rate:r.rate,cost:+(r.rate*qty).toFixed(2),cat:activeCat,catLabel:CAT_LABELS[activeCat]};
+  const entry={id:Date.now()+'',date:todayKey(),ts:Date.now(),uid,customer:cust||'—',part:part||'—',name,qty,unit:document.getElementById('inp-unit').value,rate:r.rate,cost:+(r.rate*qty).toFixed(2),cat:activeCat,catLabel:CAT_LABELS[activeCat]};
   await dbPut('entries',entry);
   todayEntries.push(entry);
   document.getElementById('inp-qty').value='';
@@ -595,6 +611,7 @@ function renderLog(){
     <div class="entry-item">
       <div class="ei-top"><div class="ei-name">${e.name}</div><div class="ei-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div></div>
       <div class="ei-meta"><span class="tag tag-${e.cat}">${e.catLabel}</span><span class="esub">${e.qty} ${e.unit} × ₹${e.rate.toFixed(2)}</span><span class="esub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      ${e.uid&&e.uid!=='—'?`<div class="ei-meta"><span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;background:#f5f3ff;color:#6d28d9;font-family:monospace">🔥 ${e.uid}</span></div>`:''}
       <div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span><div style="display:flex;gap:6px;margin-left:auto"><button class="btn-sm btn-amber" onclick="openEditModal('${e.id}')">Edit</button><button class="btn-sm btn-red2" onclick="deleteEntry('${e.id}')">Delete</button></div></div>
     </div>`).join('')+'</div>';
   document.getElementById('log-total').textContent='₹'+todayEntries.reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:2});
@@ -610,27 +627,46 @@ async function deleteEntry(id){
 // ── HISTORY ───────────────────────────────────────────────────────────────────
 async function renderHistory(){
   const all=await dbGetAll('entries');
+  const uidQ=(document.getElementById('uid-search')?.value||'').trim().toLowerCase();
+  // Filter by UID search if active
+  const filtered=uidQ?all.filter(e=>(e.uid||'').toLowerCase().includes(uidQ)):all;
+
+  // Stats always on full data
   const byDate={};
-  all.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
+  filtered.forEach(e=>{if(!byDate[e.date])byDate[e.date]=[];byDate[e.date].push(e);});
   const dates=Object.keys(byDate).sort().reverse();
   document.getElementById('stat-days').textContent=dates.length;
-  document.getElementById('stat-entries').textContent=all.length;
+  document.getElementById('stat-entries').textContent=filtered.length;
   const now=new Date();
   const wStart=new Date(now);wStart.setDate(now.getDate()-now.getDay());
   const mStart=new Date(now.getFullYear(),now.getMonth(),1);
-  document.getElementById('stat-week').textContent='₹'+all.filter(e=>new Date(e.date)>=wStart).reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:0});
-  document.getElementById('stat-month').textContent='₹'+all.filter(e=>new Date(e.date)>=mStart).reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:0});
+  document.getElementById('stat-week').textContent='₹'+filtered.filter(e=>new Date(e.date)>=wStart).reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:0});
+  document.getElementById('stat-month').textContent='₹'+filtered.filter(e=>new Date(e.date)>=mStart).reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+  // Show UID filter info
+  const infoEl=document.getElementById('uid-filter-info');
+  if(uidQ){
+    const uids=[...new Set(filtered.map(e=>e.uid).filter(u=>u&&u!=='—'))];
+    infoEl.style.display='block';
+    infoEl.innerHTML=`🔥 Showing ${filtered.length} entries across ${dates.length} days · Heat Codes: <b>${uids.join(', ')||'—'}</b> · Total: <b>₹${filtered.reduce((s,e)=>s+e.cost,0).toLocaleString('en-IN',{maximumFractionDigits:0})}</b>`;
+  } else {
+    infoEl.style.display='none';
+  }
+
   const list=document.getElementById('history-list');
-  if(dates.length===0){list.innerHTML='<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No records yet</div></div>';return;}
+  if(dates.length===0){list.innerHTML='<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">'+(uidQ?'No entries found for this Heat Code':'No records yet')+'</div></div>';return;}
   list.innerHTML=dates.map(date=>{
     const es=byDate[date],total=es.reduce((s,e)=>s+e.cost,0);
     const fd=new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
-    return `<div class="date-entry" onclick="showDayDetail('${date}')"><div><div class="de-label">${fd}</div><div class="de-count">${es.length} entr${es.length===1?'y':'ies'}</div></div><div class="de-total">₹${total.toLocaleString('en-IN',{maximumFractionDigits:0})}</div></div>`;
+    const uids=[...new Set(es.map(e=>e.uid).filter(u=>u&&u!=='—'))];
+    const uidBadge=uids.length?`<div style="font-size:10px;color:#6d28d9;font-family:monospace;margin-top:2px">🔥 ${uids.join(' · ')}</div>`:'';
+    return `<div class="date-entry" onclick="showDayDetail('${date}','${uidQ}')"><div><div class="de-label">${fd}</div><div class="de-count">${es.length} entr${es.length===1?'y':'ies'}</div>${uidBadge}</div><div class="de-total">₹${total.toLocaleString('en-IN',{maximumFractionDigits:0})}</div></div>`;
   }).join('');
 }
 
-async function showDayDetail(date){
-  const entries=await dbGetByIndex('entries','date',date);
+async function showDayDetail(date, uidFilter){
+  let entries=await dbGetByIndex('entries','date',date);
+  if(uidFilter)entries=entries.filter(e=>(e.uid||'').toLowerCase().includes(uidFilter.toLowerCase()));
   entries.sort((a,b)=>a.ts-b.ts);
   const fd=new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const total=entries.reduce((s,e)=>s+e.cost,0);
@@ -638,8 +674,9 @@ async function showDayDetail(date){
   document.getElementById('modal-body').innerHTML=
     `<div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
        <span style="font-size:13px;color:var(--text2)">${entries.length} entries</span>
-       <div style="display:flex;gap:8px;align-items:center">
-         <button class="btn-sm btn-green2" onclick="exportCSV('date','${date}')">⬇ Excel</button>
+       <div style="display:flex;gap:6px;align-items:center">
+         <button class="btn-sm btn-green2" onclick="exportExcel('date','${date}')">⬇ Log</button>
+         <button class="btn-sm btn-amber" onclick="exportBOM('date','${date}')">📊 BOM</button>
          <span style="font-size:16px;font-weight:700;color:var(--green)">₹${total.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
        </div>
      </div>`+
@@ -647,6 +684,7 @@ async function showDayDetail(date){
     <div class="entry-item">
       <div class="ei-top"><div class="ei-name">${e.name}</div><div class="ei-cost">₹${e.cost.toLocaleString('en-IN',{maximumFractionDigits:2})}</div></div>
       <div class="ei-meta"><span class="tag tag-${e.cat}">${e.catLabel}</span><span class="esub">${e.qty} ${e.unit}</span><span class="esub" style="margin-left:auto">${new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      ${e.uid&&e.uid!=='—'?`<div class="ei-meta"><span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;background:#f5f3ff;color:#6d28d9;font-family:monospace">🔥 ${e.uid}</span></div>`:''}
       <div class="ei-meta"><span class="esub">${e.part!=='—'?e.part+' · ':''} ${e.customer}</span><div style="display:flex;gap:6px;margin-left:auto"><button class="btn-sm btn-amber" onclick="openEditModal('${e.id}','${date}')">Edit</button><button class="btn-sm btn-red2" onclick="deleteEntryFromModal('${e.id}','${date}')">Delete</button></div></div>
     </div>`).join('')+'</div>';
   document.getElementById('modal').classList.add('open');
@@ -660,6 +698,7 @@ async function openEditModal(id, returnDate){
   if(!entry)return;
   document.getElementById('modal-title').textContent='Edit Entry';
   document.getElementById('modal-body').innerHTML=`
+    <div class="edit-field"><div class="lbl">Heat Code/UID</div><input type="text" id="edit-uid" value="${entry.uid&&entry.uid!=='—'?entry.uid:''}" placeholder="e.g. H-130526-01" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:13px;font-family:monospace;outline:none;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
     <div class="edit-field"><div class="lbl">Consumable Item</div><input type="text" id="edit-name" value="${entry.name}" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
       <div class="edit-field" style="margin-bottom:0"><div class="lbl">Quantity</div><input type="number" id="edit-qty" value="${entry.qty}" min="0" step="0.01" style="width:100%;padding:10px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--rsm);color:var(--text);font-size:14px;font-family:inherit;outline:none;"></div>
@@ -676,13 +715,14 @@ async function saveEditEntry(id, returnDate){
   const all=await dbGetAll('entries');
   const entry=all.find(e=>e.id===id);
   if(!entry)return;
+  const uid=document.getElementById('edit-uid').value.trim()||'—';
   const name=document.getElementById('edit-name').value.trim()||entry.name;
   const qty=parseFloat(document.getElementById('edit-qty').value)||entry.qty;
   const rate=parseFloat(document.getElementById('edit-rate').value);
   const customer=document.getElementById('edit-customer').value.trim()||'—';
   const part=document.getElementById('edit-part').value.trim()||'—';
   const cost=+((isNaN(rate)?entry.rate:rate)*qty).toFixed(2);
-  const updated={...entry,name,qty,rate:isNaN(rate)?entry.rate:rate,cost,customer,part};
+  const updated={...entry,uid,name,qty,rate:isNaN(rate)?entry.rate:rate,cost,customer,part};
   await dbPut('entries',updated);
   // update todayEntries cache if it's today
   const idx=todayEntries.findIndex(e=>e.id===id);
@@ -703,61 +743,231 @@ async function deleteEntryFromModal(id, date){
   showToast('Entry deleted');
 }
 
-// ── EXPORT EXCEL ──────────────────────────────────────────────────────────────
-async function exportCSV(mode, dateVal){
+// ── EXPORT HELPERS ────────────────────────────────────────────────────────────
+async function getFilteredRows(mode, dateVal){
   const all=await dbGetAll('entries');
-  let rows=all;
-  let filename='fettling-all.xlsx';
   const now=new Date();
-  if(mode==='today'){
-    rows=all.filter(e=>e.date===todayKey());
-    filename=`fettling-${todayKey()}.xlsx`;
-  } else if(mode==='month'){
+  if(mode==='today') return all.filter(e=>e.date===todayKey());
+  if(mode==='month'){
     const mStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0];
-    rows=all.filter(e=>e.date>=mStart);
-    filename=`fettling-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}.xlsx`;
-  } else if(mode==='date'&&dateVal){
-    rows=all.filter(e=>e.date===dateVal);
-    filename=`fettling-${dateVal}.xlsx`;
+    return all.filter(e=>e.date>=mStart);
   }
-  rows.sort((a,b)=>a.ts-b.ts);
+  if(mode==='date'&&dateVal) return all.filter(e=>e.date===dateVal);
+  if(mode==='uid'&&dateVal) return all.filter(e=>(e.uid||'').toLowerCase().includes(dateVal.toLowerCase()));
+  return all;
+}
+function filenameFor(mode,dateVal){
+  const now=new Date();
+  if(mode==='today') return `fettling-log-${todayKey()}`;
+  if(mode==='month') return `fettling-log-${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  if(mode==='date'&&dateVal) return `fettling-log-${dateVal}`;
+  if(mode==='uid'&&dateVal) return `fettling-uid-${dateVal.replace(/[^a-zA-Z0-9-]/g,'_')}`;
+  return 'fettling-log-all';
+}
 
+function applyHdrStyle(ws, cols, row){
+  cols.forEach(c=>{
+    const cell=c+row;
+    if(!ws[cell])return;
+    ws[cell].s={font:{bold:true,color:{rgb:'FFFFFF'},name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'1E3A5F'}},alignment:{horizontal:'center'}};
+  });
+}
+function applySubHdrStyle(ws, cols, row, rgb){
+  cols.forEach(c=>{
+    const cell=c+row;
+    if(!ws[cell])return;
+    ws[cell].s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:rgb||'DBEAFE'}},alignment:{horizontal:'left'}};
+  });
+}
+
+// ── RAW LOG EXPORT ────────────────────────────────────────────────────────────
+async function exportExcel(mode, dateVal){
+  const rows=(await getFilteredRows(mode,dateVal)).sort((a,b)=>a.ts-b.ts);
   if(!rows.length){showToast('No entries to export');return;}
-
-  // Build worksheet data
-  const wsData=[
-    ['Date','Time','Customer','Part No.','Category','Item','Qty','Unit','Rate (₹)','Cost (₹)'],
-    ...rows.map(e=>[
-      e.date,
-      new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
-      e.customer, e.part, e.catLabel, e.name,
-      e.qty, e.unit,
-      parseFloat(e.rate.toFixed(2)),
-      parseFloat(e.cost.toFixed(2))
-    ])
-  ];
-
+  const fname=filenameFor(mode,dateVal);
+  const hdr=['Heat Code','Date','Time','Customer','Part No.','Category','Item','Qty','Unit','Rate (₹)','Cost (₹)'];
+  const wsData=[hdr,...rows.map(e=>[
+    e.uid||'—',
+    e.date,
+    new Date(e.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}),
+    e.customer,e.part,e.catLabel,e.name,
+    e.qty,e.unit,
+    parseFloat(e.rate.toFixed(2)),parseFloat(e.cost.toFixed(2))
+  ])];
   const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols']=[{wch:18},{wch:12},{wch:8},{wch:22},{wch:12},{wch:16},{wch:32},{wch:8},{wch:6},{wch:12},{wch:12}];
+  applyHdrStyle(ws,['A','B','C','D','E','F','G','H','I','J','K'],1);
+  const lr=wsData.length+1;
+  ws[`J${lr}`]={v:'TOTAL',t:'s',s:{font:{bold:true,name:'Arial'}}};
+  ws[`K${lr}`]={f:`SUM(K2:K${lr-1})`,t:'n',s:{font:{bold:true,name:'Arial'}}};
+  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lr-1,c:10}});
+  XLSX.utils.book_append_sheet(wb,ws,'Consumption Log');
+  XLSX.writeFile(wb,fname+'.xlsx');
+  showToast(`✓ Exported ${rows.length} rows`);
+}
 
-  // Column widths
-  ws['!cols']=[{wch:12},{wch:8},{wch:20},{wch:12},{wch:16},{wch:30},{wch:8},{wch:6},{wch:12},{wch:12}];
+// ── BOM EXPORT ────────────────────────────────────────────────────────────────
+async function exportBOM(mode, dateVal){
+  // For 'uid' mode, use the UID search box value if no dateVal provided
+  let uidVal=dateVal;
+  if(mode==='uid'&&!uidVal){
+    uidVal=(document.getElementById('uid-search')?.value||'').trim();
+    if(!uidVal){showToast('Enter a Heat Code in the search box first');return;}
+  }
+  const rows=(await getFilteredRows(mode,uidVal)).sort((a,b)=>a.ts-b.ts);
+  if(!rows.length){showToast('No entries to export');return;}
+  const fname=filenameFor(mode,uidVal).replace('log','bom');
+  const wb=XLSX.utils.book_new();
 
-  // Bold header row
-  const hdrStyle={font:{bold:true},fill:{fgColor:{rgb:'2563EB'}},font:{bold:true,color:{rgb:'FFFFFF'}}};
-  ['A1','B1','C1','D1','E1','F1','G1','H1','I1','J1'].forEach(cell=>{
-    if(ws[cell])ws[cell].s=hdrStyle;
+  // Helper to build a BOM sheet grouped by: optionally UID > Customer > Part > Item
+  function buildBOMSheet(sheetRows, title, periodLabel, groupByUID){
+    const bomRows=[];
+    bomRows.push([title,'','','','','','','','']);
+    bomRows.push([periodLabel,'','','','','','','','']);
+    bomRows.push([]);
+    if(groupByUID){
+      bomRows.push(['Heat Code','Customer','Part No.','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)']);
+    } else {
+      bomRows.push(['Customer','Part No.','Category','Consumable Item','Unit','Total Qty','Rate (₹)','Total Cost (₹)','']);
+    }
+    const hdrRowNum=4;
+    const cols=groupByUID?['A','B','C','D','E','F','G','H','I']:['A','B','C','D','E','F','G','H'];
+    const numCols=groupByUID?9:8;
+
+    // Build grouped structure
+    const grouped={};
+    sheetRows.forEach(e=>{
+      const uid=groupByUID?(e.uid&&e.uid!=='—'?e.uid:'(No Heat Code)'):null;
+      const cust=e.customer||'—';
+      const part=e.part||'—';
+      const item=e.name;
+      const topKey=groupByUID?uid:cust;
+      const midKey=groupByUID?cust:part;
+      if(!grouped[topKey])grouped[topKey]={};
+      if(!grouped[topKey][midKey])grouped[topKey][midKey]={};
+      const bottomKey=groupByUID?part:item;
+      if(!grouped[topKey][midKey][bottomKey]){
+        grouped[topKey][midKey][bottomKey]=groupByUID
+          ?{items:{}}
+          :{cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
+      }
+      if(groupByUID){
+        if(!grouped[topKey][midKey][bottomKey].items[item])
+          grouped[topKey][midKey][bottomKey].items[item]={cat:e.catLabel,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
+        grouped[topKey][midKey][bottomKey].items[item].totalQty+=e.qty;
+        grouped[topKey][midKey][bottomKey].items[item].totalCost+=e.cost;
+      } else {
+        grouped[topKey][midKey][bottomKey].totalQty+=e.qty;
+        grouped[topKey][midKey][bottomKey].totalCost+=e.cost;
+        grouped[topKey][midKey][bottomKey].cat=e.catLabel;
+        grouped[topKey][midKey][bottomKey].unit=e.unit;
+        grouped[topKey][midKey][bottomKey].rate=e.rate;
+      }
+    });
+
+    let grandTotal=0;
+    Object.keys(grouped).sort().forEach(topKey=>{
+      let topTotal=0;
+      Object.keys(grouped[topKey]).sort().forEach(midKey=>{
+        let midTotal=0;
+        const midGroup=grouped[topKey][midKey];
+        Object.keys(midGroup).sort().forEach(bottomKey=>{
+          if(groupByUID){
+            // bottomKey = part, midKey = customer, topKey = uid
+            const partItems=midGroup[bottomKey].items;
+            Object.keys(partItems).sort().forEach(itemName=>{
+              const d=partItems[itemName];
+              const cost=parseFloat(d.totalCost.toFixed(2));
+              bomRows.push([topKey,midKey,bottomKey,d.cat,itemName,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost]);
+              midTotal+=cost;
+            });
+          } else {
+            // bottomKey = item, midKey = part, topKey = customer
+            const d=midGroup[bottomKey];
+            const cost=parseFloat(d.totalCost.toFixed(2));
+            bomRows.push([topKey,midKey,d.cat,bottomKey,d.unit,parseFloat(d.totalQty.toFixed(3)),parseFloat(d.rate.toFixed(2)),cost,'']);
+            midTotal+=cost;
+          }
+        });
+        // Mid subtotal
+        const midLabel=groupByUID?`  Customer Total: ${midKey}`:`  Part Subtotal: ${bottomKey||midKey}`;
+        const midRow=new Array(numCols).fill('');
+        midRow[groupByUID?1:2]=midLabel;midRow[numCols-1]=parseFloat(midTotal.toFixed(2));
+        bomRows.push(midRow);
+        topTotal+=midTotal;
+      });
+      // Top subtotal
+      const topLabel=groupByUID?`  Heat Code Total: ${topKey}`:`  Customer Total: ${topKey}`;
+      const topRow=new Array(numCols).fill('');
+      topRow[groupByUID?0:1]=topLabel;topRow[numCols-1]=parseFloat(topTotal.toFixed(2));
+      bomRows.push(topRow);
+      grandTotal+=topTotal;
+      bomRows.push(new Array(numCols).fill(''));
+    });
+    // Grand total
+    const grandRow=new Array(numCols).fill('');
+    grandRow[0]='GRAND TOTAL';grandRow[numCols-1]=parseFloat(grandTotal.toFixed(2));
+    bomRows.push(grandRow);
+
+    const ws=XLSX.utils.aoa_to_sheet(bomRows);
+    ws['!cols']=groupByUID
+      ?[{wch:20},{wch:20},{wch:12},{wch:14},{wch:30},{wch:7},{wch:10},{wch:12},{wch:14}]
+      :[{wch:22},{wch:14},{wch:16},{wch:32},{wch:7},{wch:10},{wch:12},{wch:14},{wch:4}];
+    if(ws['A1'])ws['A1'].s={font:{bold:true,sz:13,name:'Arial',color:{rgb:'1E3A5F'}}};
+    if(ws['A2'])ws['A2'].s={font:{italic:true,name:'Arial',color:{rgb:'555555'}}};
+    applyHdrStyle(ws,cols,hdrRowNum);
+    bomRows.forEach((r,i)=>{
+      const rowNum=i+1;
+      const isGrand=r[0]==='GRAND TOTAL';
+      const isTopSub=typeof r[groupByUID?0:1]==='string'&&(r[groupByUID?0:1].startsWith('  Heat Code Total')||r[groupByUID?0:1].startsWith('  Customer Total'));
+      const isMidSub=typeof r[groupByUID?1:2]==='string'&&(r[groupByUID?1:2].startsWith('  Customer Total')||r[groupByUID?1:2].startsWith('  Part Subtotal'));
+      if(isMidSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{italic:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'F0F9FF'}}};});
+      if(isTopSub) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'DBEAFE'}}};});
+      if(isGrand) cols.forEach(c=>{const cell=ws[c+rowNum];if(cell)cell.s={font:{bold:true,color:{rgb:'FFFFFF'},name:'Arial'},fill:{patternType:'solid',fgColor:{rgb:'16A34A'}}};});
+    });
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:bomRows.length-1,c:numCols-1}});
+    return ws;
+  }
+
+  const periodLabel=mode==='today'?`Date: ${todayKey()}`:mode==='month'?`Month: ${new Date().toLocaleString('en-IN',{month:'long',year:'numeric'})}`:mode==='date'?`Date: ${dateVal}`:mode==='uid'?`Heat Code: ${uidVal}`:'All Records';
+
+  // Sheet 1: BOM by Customer > Part > Item
+  const wsBOM=buildBOMSheet(rows,'FETTLING CONSUMABLES — BOM SUMMARY',periodLabel,false);
+  XLSX.utils.book_append_sheet(wb,wsBOM,'BOM (Customer-Part)');
+
+  // Sheet 2: BOM by UID > Customer > Part > Item (only if entries have UIDs)
+  const hasUIDs=rows.some(e=>e.uid&&e.uid!=='—');
+  if(hasUIDs||mode==='uid'){
+    const wsUID=buildBOMSheet(rows,'FETTLING CONSUMABLES — HEAT CODE BOM',periodLabel,true);
+    XLSX.utils.book_append_sheet(wb,wsUID,'BOM (by Heat Code)');
+  }
+
+  // Sheet 3: Item-wise consolidated
+  const itemMap={};
+  const catOrder={rc:1,el:2,wh:3,mp:4};
+  rows.forEach(e=>{
+    if(!itemMap[e.name])itemMap[e.name]={cat:e.catLabel,catKey:e.cat,unit:e.unit,rate:e.rate,totalQty:0,totalCost:0};
+    itemMap[e.name].totalQty+=e.qty;
+    itemMap[e.name].totalCost+=e.cost;
   });
+  const itemRows=[['Category','Consumable Item','Unit','Rate (₹)','Total Qty Consumed','Total Cost (₹)']];
+  Object.keys(itemMap).sort((a,b)=>(catOrder[itemMap[a].catKey]||9)-(catOrder[itemMap[b].catKey]||9)||a.localeCompare(b)).forEach(name=>{
+    const d=itemMap[name];
+    itemRows.push([d.cat,name,d.unit,parseFloat(d.rate.toFixed(2)),parseFloat(d.totalQty.toFixed(3)),parseFloat(d.totalCost.toFixed(2))]);
+  });
+  itemRows.push(['','','','','TOTAL',parseFloat(Object.values(itemMap).reduce((s,d)=>s+d.totalCost,0).toFixed(2))]);
+  const wsItem=XLSX.utils.aoa_to_sheet(itemRows);
+  wsItem['!cols']=[{wch:16},{wch:34},{wch:7},{wch:12},{wch:18},{wch:14}];
+  applyHdrStyle(wsItem,['A','B','C','D','E','F'],1);
+  const ilr=itemRows.length;
+  if(wsItem[`E${ilr}`])wsItem[`E${ilr}`].s={font:{bold:true,name:'Arial'}};
+  if(wsItem[`F${ilr}`])wsItem[`F${ilr}`].s={font:{bold:true,name:'Arial'}};
+  wsItem['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:ilr-1,c:5}});
+  XLSX.utils.book_append_sheet(wb,wsItem,'Item-wise Summary');
 
-  // Add totals row
-  const lastRow=wsData.length+1;
-  ws[`I${lastRow}`]={v:'TOTAL',t:'s',s:{font:{bold:true}}};
-  ws[`J${lastRow}`]={f:`SUM(J2:J${lastRow-1})`,t:'n',s:{font:{bold:true}}};
-  ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastRow-1,c:9}});
-
-  XLSX.utils.book_append_sheet(wb,ws,'Fettling Log');
-  XLSX.writeFile(wb,filename);
-  showToast(`✓ Exported ${rows.length} rows to Excel`);
+  XLSX.writeFile(wb,fname+'.xlsx');
+  showToast(`✓ BOM exported — ${Object.keys(itemMap).length} items`);
 }
 
 // ── MANAGE: CUSTOMERS ─────────────────────────────────────────────────────────
