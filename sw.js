@@ -1,4 +1,4 @@
-const CACHE = 'fettling-v4';
+const CACHE = 'fettling-v5';
 const ASSETS = [
   './index.html',
   './manifest.json',
